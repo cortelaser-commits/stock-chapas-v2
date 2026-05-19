@@ -185,6 +185,24 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
   .hist-card{padding:10px 12px}
   .hist-detalle{grid-template-columns:1fr 1fr}
 }
+
+/* ── VISTA MOBILE CARDS ─────────────────────────── */
+@media(max-width:600px){
+  .tabla-desktop{display:none}
+  .cards-mobile{display:block}
+  .chapa-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px}
+  .chapa-card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .chapa-card-mat{font-size:13px;font-weight:700}
+  .chapa-card-esp{font-size:13px;color:var(--text2)}
+  .chapa-card-med{font-size:12px;color:var(--text3);margin-bottom:8px}
+  .chapa-card-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .chapa-card-precio{font-size:12px;color:var(--text2)}
+  .chapa-card-actions{display:flex;align-items:center;gap:6px}
+}
+@media(min-width:601px){
+  .tabla-desktop{display:table}
+  .cards-mobile{display:none}
+}
 </style>
 </head>
 <body>
@@ -540,26 +558,72 @@ function render(){
     const rows=items.filter(it=>it.pallet===p&&matches(it));
     if(!rows.length)return;any=true;
     const hasCrit=rows.some(x=>getStatus(x.qty)==="crit"),hasWarn=rows.some(x=>getStatus(x.qty)==="warn");
-    html+=`<div class="pallet-section"><div class="pallet-header"><span>📦</span><span class="pallet-num">Pallet ${p}</span>${hasCrit?`<span class="pallet-badge pb-crit">🔴 Sin stock</span>`:""}${hasWarn&&!hasCrit?`<span class="pallet-badge pb-warn">⚠️ Stock bajo</span>`:""}<span class="pallet-count">${rows.length} ítem${rows.length!==1?"s":""}</span></div>
-    <table><thead><tr><th>Material</th><th>Espesor</th><th>Medidas</th><th>Tipo</th><th>Precio USD/kg</th><th>Cantidad</th><th>Estado</th><th></th></tr></thead><tbody>
-    ${rows.map(it=>{const s=getStatus(it.qty);return`<tr>
-      <td><span class="mat-tag ${matClass(it.mat)}">${it.mat}</span></td>
-      <td style="font-weight:600">${it.esp}</td>
-      <td style="color:var(--text2);font-size:12px">${it.med}</td>
-      <td style="color:var(--text2);font-size:12px">${it.tipo}</td>
-      <td><input type="number" min="0" step="0.01" placeholder="—" value="${it.precio||''}" onchange="updatePrecio(${it.id},this.value)" style="width:70px;height:28px;text-align:center;font-size:13px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"><span style="font-size:11px;color:var(--text3)"> USD</span></td>
-      <td><div class="qty-wrap">
-        <button class="qty-btn" onclick="abrirModalConsumo(${it.id})" title="Registrar consumo">−</button>
-        <input class="qty-input ${s==="ok"?"":s}" type="number" min="0" value="${it.qty}" onchange="updateQty(${it.id},this.value)">
-        <button class="qty-btn" onclick="changeQty(${it.id},1)">+</button>
-      </div></td>
-      <td>${badgeHTML(it.qty)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn-del" onclick="eliminarUnidad(${it.id})" title="Quitar 1 unidad sin consumo" style="font-size:11px;padding:2px 6px">🗑×1</button>
-        <button class="btn-del" onclick="deleteRow(${it.id})" title="Eliminar fila completa" style="font-size:11px;padding:2px 6px;margin-left:2px">🗑Fila</button>
-      </td>
-    </tr>`;}).join("")}
-    </tbody></table></div>`;
+    html+=`<div class="pallet-section">
+      <div class="pallet-header">
+        <span>📦</span><span class="pallet-num">Pallet ${p}</span>
+        ${hasCrit?`<span class="pallet-badge pb-crit">🔴 Sin stock</span>`:""}
+        ${hasWarn&&!hasCrit?`<span class="pallet-badge pb-warn">⚠️ Stock bajo</span>`:""}
+        <span class="pallet-count">${rows.length} ítem${rows.length!==1?"s":""}</span>
+      </div>
+
+      <!-- TABLA DESKTOP -->
+      <table class="tabla-desktop" style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th>Material</th><th>Espesor</th><th>Medidas</th><th>Tipo</th>
+          <th>USD/kg</th><th>Cantidad</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(it=>{const s=getStatus(it.qty);return`<tr>
+          <td><span class="mat-tag ${matClass(it.mat)}">${it.mat}</span></td>
+          <td style="font-weight:600">${it.esp}</td>
+          <td style="color:var(--text2);font-size:12px">${it.med}</td>
+          <td style="color:var(--text2);font-size:12px">${it.tipo}</td>
+          <td><input type="number" min="0" step="0.01" placeholder="—" value="${it.precio||''}" onchange="updatePrecio(${it.id},this.value)" style="width:65px;height:28px;text-align:center;font-size:13px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"></td>
+          <td><div class="qty-wrap">
+            <button class="qty-btn" onclick="abrirModalConsumo(${it.id})" title="Registrar consumo">−</button>
+            <input class="qty-input ${s==="ok"?"":s}" type="number" min="0" value="${it.qty}" onchange="updateQty(${it.id},this.value)">
+            <button class="qty-btn" onclick="changeQty(${it.id},1)">+</button>
+          </div></td>
+          <td>${badgeHTML(it.qty)}</td>
+          <td style="white-space:nowrap">
+            <button class="btn-del" onclick="eliminarUnidad(${it.id})" title="Quitar 1 unidad" style="font-size:11px;padding:2px 5px">🗑×1</button>
+            <button class="btn-del" onclick="deleteRow(${it.id})" title="Eliminar fila" style="font-size:11px;padding:2px 5px">🗑Fila</button>
+          </td>
+        </tr>`;}).join("")}
+        </tbody>
+      </table>
+
+      <!-- CARDS MOBILE -->
+      <div class="cards-mobile" style="padding:8px">
+        ${rows.map(it=>{const s=getStatus(it.qty);return`
+        <div class="chapa-card">
+          <div class="chapa-card-top">
+            <span class="mat-tag ${matClass(it.mat)}">${it.mat}</span>
+            <span class="chapa-card-esp">${it.esp}</span>
+            <span style="margin-left:auto">${badgeHTML(it.qty)}</span>
+          </div>
+          <div class="chapa-card-med">${it.med!=="—"?it.med+"":" "} · ${it.tipo}</div>
+          <div class="chapa-card-bottom">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Cantidad</div>
+              <div class="qty-wrap">
+                <button class="qty-btn" onclick="abrirModalConsumo(${it.id})" style="background:#1a1917;color:#fff;border-color:#1a1917">−</button>
+                <input class="qty-input ${s==="ok"?"":s}" type="number" min="0" value="${it.qty}" onchange="updateQty(${it.id},this.value)" style="width:44px">
+                <button class="qty-btn" onclick="changeQty(${it.id},1)">+</button>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:2px">USD/kg</div>
+              <input type="number" min="0" step="0.01" value="${it.precio||''}" onchange="updatePrecio(${it.id},this.value)" style="width:65px;height:30px;text-align:center;font-size:13px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <button onclick="eliminarUnidad(${it.id})" style="height:26px;padding:0 8px;background:none;border:1px solid var(--border);border-radius:5px;font-size:11px;cursor:pointer;color:var(--text2)">🗑×1</button>
+              <button onclick="deleteRow(${it.id})" style="height:26px;padding:0 8px;background:none;border:1px solid #e04040;border-radius:5px;font-size:11px;cursor:pointer;color:#b22020">🗑Fila</button>
+            </div>
+          </div>
+        </div>`;}).join("")}
+      </div>
+    </div>`;
   });
   if(!any)html=`<div class="empty">No hay resultados</div>`;
   cont.innerHTML=html;updateStats();
