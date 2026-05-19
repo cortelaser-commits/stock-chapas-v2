@@ -1,0 +1,7 @@
+{
+  "name": "stock-chapas-v2",
+  "version": "2.0.0",
+  "main": "servidor.js",
+  "scripts": { "start": "node servidor.js" },
+  "dependencies": { "mongodb": "^6.0.0" }
+}
