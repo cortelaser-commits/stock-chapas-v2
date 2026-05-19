@@ -281,12 +281,8 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
     <div class="add-section">
       <div class="add-title">➕ Agregar chapa al stock</div>
       <div class="add-grid">
-        <div class="add-field"><label>Pallet</label>
-          <select id="n-pallet" style="width:100px">
-            <option value="1">Pallet 1</option><option value="2">Pallet 2</option><option value="3">Pallet 3</option>
-            <option value="4">Pallet 4</option><option value="5">Pallet 5</option><option value="6">Pallet 6</option>
-            <option value="7">Pallet 7</option><option value="8">Pallet 8</option><option value="9">Pallet 9</option>
-          </select>
+        <div class="add-field"><label>Pallet N°</label>
+          <input type="number" id="n-pallet" min="1" max="999" placeholder="ej: 10" style="width:90px" value="1">
         </div>
         <div class="add-field"><label>Material</label>
           <select id="n-mat" style="width:160px" onchange="updateEspesores()">
