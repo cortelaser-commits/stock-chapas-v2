@@ -256,6 +256,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
     <div class="tab active" onclick="switchTab('stock',this)">📋 Stock</div>
     <div class="tab" onclick="switchTab('historial',this)">📊 Historial de consumos</div>
     <div class="tab" onclick="switchTab('precios',this)">💰 Precios</div>
+    <div class="tab" onclick="switchTab('laser',this)">⚡ Láser</div>
     <div class="tab" onclick="switchTab('precios',this)">💰 Gestión de precios</div>
   </div>
 
@@ -361,6 +362,40 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
       <button class="btn-add" onclick="exportHistorialCSV()">⬇ Exportar historial CSV</button>
     </div>
     <div id="hist-content"><div class="hist-empty">No hay consumos registrados aún.</div></div>
+  </div>
+
+  <!-- TAB LASER -->
+  <div id="tab-laser" class="tab-content">
+    <div id="laser-content"></div>
+
+    <div class="add-section" style="margin-top:8px">
+      <div class="add-title">➕ Agregar insumo láser</div>
+      <div class="add-grid">
+        <div class="add-field"><label>Categoría</label>
+          <select id="l-cat" style="width:160px">
+            <option value="Boquilla doble nueva">Boquilla doble nueva</option>
+            <option value="Boquilla doble usada">Boquilla doble usada</option>
+            <option value="Boquilla simple nueva">Boquilla simple nueva</option>
+            <option value="Boquilla simple usada">Boquilla simple usada</option>
+            <option value="Lente nuevo">Lente nuevo</option>
+            <option value="Lente usado">Lente usado</option>
+            <option value="Gas Nitrógeno">Gas Nitrógeno</option>
+            <option value="Gas Oxígeno">Gas Oxígeno</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="add-field"><label>Descripción / Medida</label>
+          <input type="text" id="l-desc" placeholder="ej: 1.0, D27.9x4.1, N2 50L" style="width:160px">
+        </div>
+        <div class="add-field"><label>Cantidad</label>
+          <input type="number" id="l-qty" placeholder="0" min="0" style="width:70px">
+        </div>
+        <div class="add-field"><label>Stock mínimo</label>
+          <input type="number" id="l-min" placeholder="2" min="0" style="width:70px" value="2">
+        </div>
+        <button class="btn-add" onclick="addLaser()">➕ Agregar</button>
+      </div>
+    </div>
   </div>
 
   <div class="footer">Fischer Montajes · Stock de Chapas · Última modificación: <span id="fecha-mod">—</span></div>
@@ -502,7 +537,7 @@ async function cargarDesdeServidor(){
     const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(8000)});
     if(!r.ok)throw new Error();
     const data=await r.json();
-    if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];actualizarFecha(data.ts);}
+    if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;actualizarFecha(data.ts);}
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();
   }catch(e){
@@ -515,7 +550,7 @@ async function guardarEnServidor(){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Guardando...";
   try{
-    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,ts:Date.now()}),signal:AbortSignal.timeout(8000)});
+    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(8000)});
     if(!r.ok)throw new Error();
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
   }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
@@ -998,7 +1033,155 @@ function exportCSV(){
   a.download="stock_chapas_"+new Date().toISOString().slice(0,10)+".csv";a.click();showToast("⬇ CSV exportado");
 }
 
+// ── STOCK LÁSER ─────────────────────────────────────
+let laserItems = [
+  // Boquillas doble nuevas
+  {id:1001,cat:"Boquilla doble nueva",desc:"1.0",qty:9,min:2},
+  {id:1002,cat:"Boquilla doble nueva",desc:"2.0",qty:3,min:2},
+  {id:1003,cat:"Boquilla doble nueva",desc:"2.5",qty:1,min:2},
+  {id:1004,cat:"Boquilla doble nueva",desc:"3.5",qty:1,min:2},
+  // Boquillas doble usadas
+  {id:1005,cat:"Boquilla doble usada",desc:"1.0",qty:1,min:1},
+  {id:1006,cat:"Boquilla doble usada",desc:"1.5",qty:1,min:1},
+  {id:1007,cat:"Boquilla doble usada",desc:"2.0",qty:1,min:1},
+  {id:1008,cat:"Boquilla doble usada",desc:"3.0",qty:1,min:1},
+  {id:1009,cat:"Boquilla doble usada",desc:"3.5",qty:1,min:1},
+  // Boquillas simple nuevas
+  {id:1010,cat:"Boquilla simple nueva",desc:"3.0",qty:8,min:2},
+  {id:1011,cat:"Boquilla simple nueva",desc:"3.5",qty:1,min:2},
+  {id:1012,cat:"Boquilla simple nueva",desc:"4.0",qty:1,min:2},
+  // Boquillas simple usadas
+  {id:1013,cat:"Boquilla simple usada",desc:"3.0",qty:2,min:1},
+  {id:1014,cat:"Boquilla simple usada",desc:"3.5",qty:1,min:1},
+  {id:1015,cat:"Boquilla simple usada",desc:"4.0",qty:1,min:1},
+  // Lentes nuevos
+  {id:1016,cat:"Lente nuevo",desc:"D27.9 × 4.1",qty:9,min:2},
+  {id:1017,cat:"Lente nuevo",desc:"D32",qty:1,min:2},
+  // Lentes usados
+  {id:1018,cat:"Lente usado",desc:"varios",qty:13,min:3},
+];
+let laserNextId = 1019;
+
+function getLaserStatus(it){ return it.qty===0?"crit":it.qty<=it.min?"warn":"ok"; }
+
+function laserBadge(it){
+  const s=getLaserStatus(it);
+  if(s==="crit") return `<span class="badge badge-crit">🔴 Sin stock</span>`;
+  if(s==="warn") return `<span class="badge badge-warn">⚠️ Stock bajo</span>`;
+  return `<span class="badge badge-ok">✅ OK</span>`;
+}
+
+function catColor(cat){
+  const c=cat.toLowerCase();
+  if(c.includes("doble")&&c.includes("nueva")) return "mat-inox";
+  if(c.includes("doble")&&c.includes("usada")) return "mat-desc";
+  if(c.includes("simple")&&c.includes("nueva")) return "mat-galv";
+  if(c.includes("simple")&&c.includes("usada")) return "mat-cort";
+  if(c.includes("lente")&&c.includes("nuevo")) return "mat-inox";
+  if(c.includes("lente")&&c.includes("usado")) return "mat-carb";
+  if(c.includes("gas")) return "mat-galv";
+  return "mat-carb";
+}
+
+function renderLaser(){
+  const cats=[...new Set(laserItems.map(x=>x.cat))];
+  const cont=document.getElementById("laser-content");
+  if(!cont) return;
+  let html="";
+  cats.forEach(cat=>{
+    const rows=laserItems.filter(x=>x.cat===cat);
+    const hasCrit=rows.some(x=>getLaserStatus(x)==="crit");
+    const hasWarn=rows.some(x=>getLaserStatus(x)==="warn");
+    html+=`<div class="pallet-section">
+      <div class="pallet-header">
+        <span>⚡</span>
+        <span class="pallet-num">${cat}</span>
+        ${hasCrit?`<span class="pallet-badge pb-crit">🔴 Sin stock</span>`:""}
+        ${hasWarn&&!hasCrit?`<span class="pallet-badge pb-warn">⚠️ Stock bajo</span>`:""}
+        <span class="pallet-count">${rows.length} ítem${rows.length!==1?"s":""}</span>
+      </div>
+      <!-- TABLA DESKTOP -->
+      <table class="tabla-desktop" style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th>Descripción / Medida</th><th>Cantidad</th><th>Mínimo</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(it=>{const s=getLaserStatus(it);return`<tr>
+          <td><span class="mat-tag ${catColor(it.cat)}">${it.desc}</span></td>
+          <td><div class="qty-wrap">
+            <button class="qty-btn" onclick="changeLaser(${it.id},-1)">−</button>
+            <input class="qty-input ${s==="ok"?"":s}" type="number" min="0" value="${it.qty}" onchange="updateLaserQty(${it.id},this.value)">
+            <button class="qty-btn" onclick="changeLaser(${it.id},1)">+</button>
+          </div></td>
+          <td style="color:var(--text2);font-size:12px">${it.min} ud.</td>
+          <td>${laserBadge(it)}</td>
+          <td><button class="btn-del" onclick="deleteLaser(${it.id})" title="Eliminar">🗑</button></td>
+        </tr>`;}).join("")}
+        </tbody>
+      </table>
+      <!-- CARDS MOBILE -->
+      <div class="cards-mobile" style="padding:8px">
+        ${rows.map(it=>{const s=getLaserStatus(it);return`
+        <div class="chapa-card">
+          <div class="chapa-card-top">
+            <span class="mat-tag ${catColor(it.cat)}">${it.desc}</span>
+            <span style="margin-left:auto">${laserBadge(it)}</span>
+          </div>
+          <div class="chapa-card-med">Mínimo: ${it.min} unidades</div>
+          <div class="chapa-card-bottom">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Cantidad</div>
+              <div class="qty-wrap">
+                <button class="qty-btn" onclick="changeLaser(${it.id},-1)">−</button>
+                <input class="qty-input ${s==="ok"?"":s}" type="number" min="0" value="${it.qty}" onchange="updateLaserQty(${it.id},this.value)" style="width:44px">
+                <button class="qty-btn" onclick="changeLaser(${it.id},1)">+</button>
+              </div>
+            </div>
+            <button onclick="deleteLaser(${it.id})" style="height:32px;padding:0 12px;background:none;border:1px solid #e04040;border-radius:5px;font-size:12px;cursor:pointer;color:#b22020">🗑 Eliminar</button>
+          </div>
+        </div>`;}).join("")}
+      </div>
+    </div>`;
+  });
+  if(!html) html=`<div class="empty">No hay insumos cargados</div>`;
+  cont.innerHTML=html;
+  guardarLaser();
+}
+
+function changeLaser(id,d){
+  const it=laserItems.find(x=>x.id===id);
+  if(it){it.qty=Math.max(0,it.qty+d);renderLaser();}
+}
+function updateLaserQty(id,v){
+  const it=laserItems.find(x=>x.id===id);
+  if(it){it.qty=Math.max(0,parseInt(v)||0);renderLaser();}
+}
+function deleteLaser(id){
+  if(confirm("¿Eliminar este insumo?"))
+  {laserItems=laserItems.filter(x=>x.id!==id);renderLaser();}
+}
+function addLaser(){
+  const cat=document.getElementById("l-cat").value;
+  const desc=document.getElementById("l-desc").value.trim();
+  const qty=parseInt(document.getElementById("l-qty").value)||0;
+  const min=parseInt(document.getElementById("l-min").value)||2;
+  if(!desc){showToast("⚠️ Ingresá una descripción");return;}
+  laserItems.push({id:laserNextId++,cat,desc,qty,min});
+  document.getElementById("l-desc").value="";
+  document.getElementById("l-qty").value="";
+  renderLaser();
+  showToast("✅ Insumo agregado");
+}
+
+function guardarLaser(){
+  // Guardar junto con el stock en el servidor
+  const data={items,nextId,historial,agotados:window.agotados||[],laserItems,laserNextId,ts:Date.now()};
+  fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),signal:AbortSignal.timeout(8000)}).catch(()=>{});
+}
+
 function switchTab(tab,el){
+  if(tab==="precios") renderTablaPrecios();
+  if(tab==="laser") renderLaser();
   if(tab==="precios") renderTablaPrecios();
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(t=>t.classList.remove("active"));
