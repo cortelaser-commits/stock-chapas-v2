@@ -4,7 +4,7 @@ const path = require('path');
 const { MongoClient } = require('mongodb');
 
 const PORT = process.env.PORT || 3000;
-const MONGO_URL = process.env.MONGO_URL || 'mongodb+srv://cortelaser_db_user:Fede1989@cluster0.fj6pnvk.mongodb.net/stockchapas?appName=Cluster0';
+const MONGO_URL = process.env.MONGO_URL || '';
 const DB_NAME = 'stockchapas';
 const COL_NAME = 'stock';
 let db = null;
