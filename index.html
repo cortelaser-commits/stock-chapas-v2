@@ -97,6 +97,15 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .cot-tar-sec:first-child{margin-top:0;padding-top:0;border:none}
 .cot-env{display:grid;grid-template-columns:1fr 1fr 24px;gap:7px;margin-bottom:6px}
 .cot-note{font-size:11.5px;color:var(--text3);margin-top:14px;padding-top:12px;border-top:1px solid var(--border);line-height:1.5}
+.cot-hist-row{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.cot-hist-row:last-child{border:none}
+.cot-hist-job{font-size:13.5px;font-weight:600}
+.cot-hist-sub{font-size:11.5px;color:var(--text3);margin-top:1px}
+.cot-hist-tot{font-size:14px;font-weight:700;white-space:nowrap}
+.cot-hist-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text2);font:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:var(--radius);cursor:pointer}
+.cot-hist-btn:hover{color:var(--text);border-color:var(--border2)}
+.cot-hist-del{background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:4px}
+.cot-hist-del:hover{color:#b22020}
 
 /* PRESUPUESTO IMPRIMIBLE */
 #cot-presupuesto{display:none}
@@ -714,9 +723,20 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
           <div class="cot-lines" id="cot-r-lines"></div>
           <div class="cot-unit"><span>Precio por cartel</span><b class="cot-mono" id="cot-r-unit">$0</b></div>
           <div class="cot-total"><div class="lbl">Total (<span id="cot-r-cant">1</span> u.)</div><div class="big cot-mono" id="cot-r-total">$0</div><div class="usd cot-mono" id="cot-r-usd">US$0</div></div>
-          <div class="cot-btns"><button class="cot-btn cot-btn-reset" onclick="cotReset()">Limpiar</button><button class="cot-btn cot-btn-print" onclick="cotImprimir()">Imprimir / PDF</button></div>
+          <div class="cot-btns" style="flex-direction:column">
+            <button class="cot-btn" style="background:var(--text);color:#fff;width:100%" onclick="cotGuardar()">💾 Guardar cotización</button>
+            <div style="display:flex;gap:8px;width:100%">
+              <button class="cot-btn cot-btn-reset" onclick="cotReset()">Limpiar</button>
+              <button class="cot-btn cot-btn-print" onclick="cotImprimir()">Imprimir / PDF</button>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+    <!-- HISTORIAL DE COTIZACIONES -->
+    <div class="cot-card" style="margin-top:6px">
+      <div class="cot-card-h">📋 Cotizaciones guardadas <span id="cot-hist-count" style="margin-left:auto;font-weight:500;color:var(--text3)"></span></div>
+      <div class="cot-b" id="cot-hist-list"><div style="color:var(--text3);font-size:13px">Todavía no guardaste ninguna cotización.</div></div>
     </div>
   </div>
 
@@ -734,7 +754,7 @@ const STD = {
   "Acero Corten":   {esp:["1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],med:["1000x2000","1220x2440","1500x3000","2000x6000"]},
 };
 
-let nextId=100, items=[], historial=[], filter="all", modalItemId=null, conectado=false;
+let nextId=100, items=[], historial=[], cotizaciones=[], filter="all", modalItemId=null, conectado=false;
 
 function setSyncStatus(estado,msg){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
@@ -751,9 +771,9 @@ async function cargarDesdeServidor(){
     const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(8000)});
     if(!r.ok)throw new Error();
     const data=await r.json();
-    if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;actualizarFecha(data.ts);}
+    if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;actualizarFecha(data.ts);}
     setSyncStatus("ok","Sincronizado ✓");
-    inicializarPrecios();render();renderHistorial();
+    inicializarPrecios();render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();
   }catch(e){
     setSyncStatus("error","⚠️ Sin conexión al servidor");
     setTimeout(cargarDesdeServidor,8000);
@@ -764,7 +784,7 @@ async function guardarEnServidor(){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Guardando...";
   try{
-    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(8000)});
+    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(8000)});
     if(!r.ok)throw new Error();
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
   }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
@@ -1518,6 +1538,81 @@ function renderCotizador(){
   }
   cotStock();
   cotCalc();
+  renderCotHist();
+}
+
+// ---- Historial de cotizaciones ----
+function cotSnapshot(){
+  const r=cotCompute();
+  return {
+    id:Date.now(), ts:Date.now(),
+    job:document.getElementById("cot-job").value||"Sin nombre",
+    cant:r.cant, dolar:r.dolar, mat:r.mat, esp:document.getElementById("cot-esp").value,
+    precio:document.getElementById("cot-precio").value,
+    areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value,
+    modo:cotModo, mm:document.getElementById("cot-mm").value, min:document.getElementById("cot-min").value,
+    golpes:document.getElementById("cot-golpes").value,
+    pintura:document.getElementById("cot-pintura").checked, oxid:document.getElementById("cot-oxid").checked, envio:document.getElementById("cot-envio").checked,
+    diseno:document.getElementById("cot-diseno").value,
+    ops:cotOps.filter(o=>o).map(o=>({nombre:o.nombre,monto:o.monto,porUnidad:o.porUnidad})),
+    total:r.total, totalUSD:r.totalUSD
+  };
+}
+function cotGuardar(silencioso){
+  if(typeof cotizaciones==="undefined")window.cotizaciones=[];
+  cotizaciones.unshift(cotSnapshot());
+  if(typeof guardarEnServidor==="function")guardarEnServidor();
+  renderCotHist();
+  if(!silencioso&&typeof showToast==="function")showToast("💾 Cotización guardada");
+}
+function renderCotHist(){
+  const el=document.getElementById("cot-hist-list");if(!el)return;
+  const cnt=document.getElementById("cot-hist-count");
+  const arr=(typeof cotizaciones!=="undefined"&&Array.isArray(cotizaciones))?cotizaciones:[];
+  if(cnt)cnt.textContent=arr.length?arr.length+(arr.length==1?" guardada":" guardadas"):"";
+  if(!arr.length){el.innerHTML='<div style="color:var(--text3);font-size:13px">Todavía no guardaste ninguna cotización.</div>';return;}
+  el.innerHTML=arr.map(c=>{
+    const f=new Date(c.ts).toLocaleDateString("es-UY",{day:"2-digit",month:"2-digit",year:"2-digit"});
+    return '<div class="cot-hist-row">'
+      +'<div><div class="cot-hist-job">'+(c.job||"Sin nombre")+'</div>'
+      +'<div class="cot-hist-sub">'+f+' · '+c.mat+' '+c.esp+'mm · '+c.cant+' u.</div></div>'
+      +'<div class="cot-hist-tot cot-mono">'+cotFmt(c.total)+'</div>'
+      +'<button class="cot-hist-btn" onclick="cotReabrir('+c.id+')">Abrir</button>'
+      +'<button class="cot-hist-del" onclick="cotBorrarHist('+c.id+')">🗑</button>'
+      +'</div>';
+  }).join("");
+}
+function cotReabrir(id){
+  const c=cotizaciones.find(x=>x.id===id);if(!c)return;
+  document.getElementById("cot-job").value=c.job==="Sin nombre"?"":c.job;
+  document.getElementById("cot-cant").value=c.cant;
+  document.getElementById("cot-dolar").value=c.dolar;
+  document.getElementById("cot-mat").value=c.mat;
+  document.getElementById("cot-esp").value=c.esp;
+  document.getElementById("cot-precio").value=c.precio;
+  cotSetArea(c.areaMode||"medida");
+  document.getElementById("cot-ancho").value=c.ancho||"";
+  document.getElementById("cot-largo").value=c.largo||"";
+  document.getElementById("cot-area").value=c.area||"";
+  cotSetModo(c.modo||"recorrido");
+  document.getElementById("cot-mm").value=c.mm||"";
+  document.getElementById("cot-min").value=c.min||"";
+  document.getElementById("cot-golpes").value=c.golpes||"";
+  document.getElementById("cot-pintura").checked=!!c.pintura;
+  document.getElementById("cot-oxid").checked=!!c.oxid;
+  document.getElementById("cot-envio").checked=!!c.envio;
+  document.getElementById("cot-diseno").value=c.diseno||"";
+  document.getElementById("cot-ops").innerHTML="";cotOps=[];
+  (c.ops||[]).forEach(o=>addCotOp(o.nombre,o.monto,o.porUnidad));
+  cotStock();cotCalc();
+  try{window.scrollTo({top:0,behavior:"smooth"});}catch(e){}
+  if(typeof showToast==="function")showToast("📂 Cotización cargada — podés editar o reimprimir");
+}
+function cotBorrarHist(id){
+  if(!confirm("¿Borrar esta cotización del historial?"))return;
+  cotizaciones=cotizaciones.filter(x=>x.id!==id);
+  if(typeof guardarEnServidor==="function")guardarEnServidor();
+  renderCotHist();
 }
 
 function cotPrefillPrecio(){
@@ -1671,6 +1766,7 @@ function cotImprimir(){
     +'<div class="pt"><span class="lbl">TOTAL</span><span class="num">'+cotFmt(r.total)+'</span></div>'
     +'<div class="pusd">≈ '+cotFmtUSD(r.totalUSD)+' · dólar $'+r.dolar+' · por cartel '+cotFmt(r.unit)+'</div>'
     +'<div class="pfoot">Presupuesto estimado. Valores sujetos a confirmación del material y del recorrido final de corte.</div>';
+  cotGuardar(true);
   window.print();
 }
 
