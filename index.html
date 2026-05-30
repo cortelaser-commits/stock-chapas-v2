@@ -700,7 +700,8 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
             <div class="cot-tar-sec">Tabla de envío (por peso del pedido)</div>
             <div id="cot-env-tabla"></div>
             <button type="button" class="cot-add" onclick="addCotEnvRow(0,0)">+ Agregar tramo</button>
-            <div class="hint" style="margin-top:6px">Cada tramo: hasta cuántos kg y cuánto cuesta. Toma el primer tramo que cubre el peso total.</div>
+            <div class="cot-f" style="margin-top:12px;max-width:200px"><label>Ganancia envío (%)</label><input type="number" class="cot-mono" id="cot-t-envmargen" value="30" step="1" oninput="cotCalc()"></div>
+            <div class="hint" style="margin-top:6px">El precio de cada tramo es el <b>costo del correo</b> (tabla Ahíva). Encima se le suma la ganancia de arriba. Toma el primer tramo que cubre el peso total; arriba de 30 kg avisa "consultar".</div>
             <div class="cot-note">El precio del material lo toma de tu pestaña 💰 Precios y la disponibilidad la lee del Stock en vivo. El precio por minuto fija el valor hora (×60).</div>
           </div>
         </details>
@@ -1503,7 +1504,7 @@ function verificarClave(){
 }
 // ════════════════ COTIZADOR DE CARTELES ════════════════
 let cotModo="recorrido", cotAreaMode="medida", cotOps=[], cotReady=false;
-let cotEnvio=[{hasta:5,precio:0},{hasta:20,precio:0},{hasta:9999,precio:0}];
+let cotEnvio=[{hasta:2,precio:195},{hasta:5,precio:220},{hasta:10,precio:275},{hasta:15,precio:325},{hasta:20,precio:405},{hasta:25,precio:465},{hasta:30,precio:550}];
 
 function cotFmt(n){return "$"+Math.round(n).toLocaleString("es-UY");}
 function cotFmtUSD(n){return "US$"+n.toLocaleString("es-UY",{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -1555,7 +1556,7 @@ function renderCotEnv(){const c=document.getElementById("cot-env-tabla");c.inner
     c.appendChild(d);});}
 function addCotEnvRow(h,p){cotEnvio.push({hasta:h,precio:p});renderCotEnv();}
 function cotDelEnvRow(i){cotEnvio.splice(i,1);renderCotEnv();cotCalc();}
-function cotEnvioPrecio(kg){const o=cotEnvio.slice().sort((a,b)=>a.hasta-b.hasta);for(const t of o){if(kg<=t.hasta)return t.precio;}return o.length?o[o.length-1].precio:0;}
+function cotEnvioPrecio(kg){const o=cotEnvio.slice().sort((a,b)=>a.hasta-b.hasta);for(const t of o){if(kg<=t.hasta)return t.precio;}return null;}
 
 function cotStock(){
   const el=document.getElementById("cot-stock-info");
@@ -1609,12 +1610,15 @@ function cotCompute(){
   const diseno=parseFloat(document.getElementById("cot-diseno").value)||0;
   const envOn=document.getElementById("cot-envio").checked;
   const pesoTotal=kg*cant;
-  const envPesos=envOn?cotEnvioPrecio(pesoTotal):0;
+  const envMargen=parseFloat(document.getElementById("cot-t-envmargen").value)||0;
+  const envBase=envOn?cotEnvioPrecio(pesoTotal):0;
+  const envExcede=envOn&&envBase===null;
+  const envPesos=(envOn&&envBase!==null)?envBase*(1+envMargen/100):0;
 
   const unit=matPesos+cortePesos+plegPesos+pintPesos+oxidPesos+opUnit;
   const total=unit*cant+opOnce+diseno+envPesos;
   return {dolar,cant,mat,esp,kg,matPesos,cortePesos,corteDesc,golpes,plegPesos,pintOn,oxidOn,pintPesos,oxidPesos,
-    opList,opOnce,diseno,envOn,envPesos,pesoTotal,unit,total,totalUSD:dolar>0?total/dolar:0,markup,pGolpe};
+    opList,opOnce,diseno,envOn,envPesos,envBase,envMargen,envExcede,pesoTotal,unit,total,totalUSD:dolar>0?total/dolar:0,markup,pGolpe};
 }
 
 function cotLine(l,sub,v,mut){return '<div class="cot-line'+(mut?' mut':'')+'"><div class="l">'+l+'<small>'+sub+'</small></div><div class="v cot-mono">'+v+'</div></div>';}
@@ -1631,8 +1635,8 @@ function cotCalc(){
   document.getElementById("cot-r-usd").textContent="≈ "+cotFmtUSD(r.totalUSD);
   document.getElementById("cot-pr-p").textContent=r.pintOn?cotFmt(r.pintPesos):"—";
   document.getElementById("cot-pr-o").textContent=r.oxidOn?cotFmt(r.oxidPesos):"—";
-  document.getElementById("cot-pr-e").textContent=r.envOn?cotFmt(r.envPesos):"—";
-  document.getElementById("cot-se").textContent=r.envOn?(r.pesoTotal.toFixed(1)+" kg total"):"según peso total del pedido";
+  document.getElementById("cot-pr-e").textContent=r.envOn?(r.envExcede?"Consultar":cotFmt(r.envPesos)):"—";
+  document.getElementById("cot-se").textContent=r.envOn?(r.envExcede?"más de 30 kg — consultar correo":(r.pesoTotal.toFixed(1)+" kg · +"+r.envMargen+"%")):"según peso total del pedido";
   let h="";
   h+=cotLine("Material","×"+r.markup+" · "+r.kg.toFixed(2)+" kg ("+r.mat+" "+r.esp+"mm)",cotFmt(r.matPesos));
   h+=cotLine("Corte",(cotModo==="recorrido"?"recorrido · ":"tiempo · ")+r.corteDesc,cotFmt(r.cortePesos));
@@ -1641,7 +1645,8 @@ function cotCalc(){
   if(r.oxidOn)h+=cotLine("Oxidación","por cartel",cotFmt(r.oxidPesos));
   r.opList.forEach(o=>{if(o.monto>0)h+=cotLine(o.nombre||"Operación",o.porUnidad?"por cartel":"monto único",cotFmt(o.monto),!o.porUnidad);});
   if(r.diseno>0)h+=cotLine("Diseño y preparación","una vez",cotFmt(r.diseno),true);
-  if(r.envOn&&r.envPesos>0)h+=cotLine("Envío",r.pesoTotal.toFixed(1)+" kg · una vez",cotFmt(r.envPesos),true);
+  if(r.envOn&&r.envExcede)h+=cotLine("Envío","más de 30 kg · consultar correo","—",true);
+  else if(r.envOn&&r.envPesos>0)h+=cotLine("Envío",r.pesoTotal.toFixed(1)+" kg · costo +"+r.envMargen+"%",cotFmt(r.envPesos),true);
   document.getElementById("cot-r-lines").innerHTML=h;
 }
 
@@ -1657,7 +1662,8 @@ function cotImprimir(){
   if(r.oxidOn)rows+=pr("Oxidación","terminación",r.cant,cotFmt(r.oxidPesos*r.cant));
   r.opList.forEach(o=>{if(o.monto>0){const q=o.porUnidad?r.cant:1;rows+=pr(o.nombre||"Operación",o.porUnidad?"por cartel":"monto único",q,cotFmt(o.monto*q));}});
   if(r.diseno>0)rows+=pr("Diseño y preparación","una vez",1,cotFmt(r.diseno));
-  if(r.envOn&&r.envPesos>0)rows+=pr("Envío",r.pesoTotal.toFixed(1)+" kg",1,cotFmt(r.envPesos));
+  if(r.envOn&&r.envExcede)rows+=pr("Envío","más de 30 kg — consultar correo",1,"—");
+  else if(r.envOn&&r.envPesos>0)rows+=pr("Envío",r.pesoTotal.toFixed(1)+" kg",1,cotFmt(r.envPesos));
   document.getElementById("cot-presupuesto").innerHTML=
     '<div class="ph"><div><h2>Presupuesto</h2><div class="psub">Corte láser · Carteles</div></div>'
     +'<div class="pmeta"><strong>'+job+'</strong><br>'+fecha+'<br>'+r.cant+' '+(r.cant==1?'unidad':'unidades')+'</div></div>'
