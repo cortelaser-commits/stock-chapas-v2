@@ -89,19 +89,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/stock') {
+    if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end('{"error":"db no lista"}'); return; }
     const data = await leerStock();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data)); return;
   }
 
   if (req.method === 'POST' && req.url === '/stock') {
+    if (!db) { res.writeHead(503); res.end('{"error":"db no lista"}'); return; }
     let b = '';
     req.on('data', c => b += c);
     req.on('end', async () => {
       try {
         const data = JSON.parse(b);
-        await guardarStock(data);
-        res.writeHead(200); res.end('{"ok":true}');
+        const ok = await guardarStock(data);
+        if (ok) { res.writeHead(200); res.end('{"ok":true}'); }
+        else { res.writeHead(503); res.end('{"error":"no se pudo guardar"}'); }
       } catch(e) { res.writeHead(400); res.end('error'); }
     }); return;
   }
@@ -109,6 +112,6 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404); res.end('not found');
 });
 
-conectarDB().then(() => {
-  server.listen(PORT, () => console.log('Servidor Stock Chapas Fischer Montajes - Puerto ' + PORT));
-});
+// Abrir el puerto ENSEGUIDA para que Render lo detecte, y conectar a la base en paralelo.
+server.listen(PORT, '0.0.0.0', () => console.log('Servidor Stock Chapas Fischer Montajes - Puerto ' + PORT));
+conectarDB();
