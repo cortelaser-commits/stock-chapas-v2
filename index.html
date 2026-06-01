@@ -835,7 +835,7 @@ function setSyncStatus(estado,msg){
 async function cargarDesdeServidor(){
   try{
     setSyncStatus("syncing","Cargando...");
-    const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(8000)});
+    const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(45000)});
     if(!r.ok)throw new Error();
     const data=await r.json();
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
@@ -851,7 +851,7 @@ async function guardarEnServidor(){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Guardando...";
   try{
-    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(8000)});
+    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(45000)});
     if(!r.ok)throw new Error();
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
   }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
@@ -860,11 +860,11 @@ async function guardarEnServidor(){
 setInterval(async()=>{
   if(!conectado)return;
   try{
-    const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(5000)});
+    const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
     const data=await r.json();
     if(data&&data.ts&&data.ts>(window._lastTs||0)){items=data.items;nextId=data.nextId||100;historial=data.historial||[];window._lastTs=data.ts;actualizarFecha(data.ts);render();renderHistorial();}
   }catch(e){}
-},10000);
+},20000);
 
 function actualizarFecha(ts){
   const d=ts?new Date(ts):new Date();
