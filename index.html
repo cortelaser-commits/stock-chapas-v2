@@ -370,6 +370,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
   <div id="alert-crit" class="alert-crit">
     <span style="font-size:20px;flex-shrink:0">🚨</span>
     <span id="alert-crit-text"></span>
+    <button onclick="cerrarAlertaStock()" title="Ocultar alerta" style="margin-left:auto;flex-shrink:0;background:none;border:none;color:inherit;font-size:18px;line-height:1;cursor:pointer;opacity:.7;padding:0 6px">✕</button>
   </div>
 
   <div class="tabs">
@@ -1141,10 +1142,16 @@ function updateStats(){
   document.getElementById("s-crit").textContent=crit.length+agotados.length;
   const bc=document.getElementById("alert-crit");
   const todos=[...crit,...agotados];
-  if(todos.length>0){
+  const sig=todos.map(x=>x.mat+"|"+x.esp+"|"+x.pallet).sort().join("·");
+  window._alertaStockSig=sig;
+  if(todos.length>0 && window._alertaDismiss!==sig){
     bc.style.display="flex";
     document.getElementById("alert-crit-text").textContent="SIN STOCK — Reponer urgente: "+todos.map(x=>x.mat+" "+x.esp+" (Pallet "+x.pallet+")").join(" · ");
   } else bc.style.display="none";
+}
+function cerrarAlertaStock(){
+  window._alertaDismiss=window._alertaStockSig||"";
+  document.getElementById("alert-crit").style.display="none";
 }
 
 // MODAL CONSUMO
@@ -1247,8 +1254,11 @@ function renderHistorial(){
   if(!filtrado.length){cont.innerHTML=`<div class="hist-empty">No hay consumos registrados aún.</div>`;return;}
   cont.innerHTML=filtrado.map(h=>{
     const precioActual=(typeof getPrecioDefault==="function"&&h.mat)?getPrecioDefault(h.mat,h.esp):0;
-    const costoActual=(h.kg_usados!=null&&precioActual>0)?Math.round(h.kg_usados*precioActual*100)/100:null;
-    const precioCambio=(costoActual!=null&&h.costo_usd!=null&&Math.abs(costoActual-h.costo_usd)>=0.01);
+    const mult=(h.qty_descontada&&h.qty_descontada>0)?h.qty_descontada:1;
+    const kgTotal=(h.kg_usados!=null)?Math.round(h.kg_usados*mult*100)/100:null;
+    const costoActual=(h.kg_usados!=null&&precioActual>0)?Math.round(h.kg_usados*mult*precioActual*100)/100:null;
+    const costoAntes=(h.costo_usd!=null)?Math.round(h.costo_usd*mult*100)/100:null;
+    const precioCambio=(costoActual!=null&&costoAntes!=null&&Math.abs(costoActual-costoAntes)>=0.01);
     return `
     <div class="hist-card">
       <div class="hist-card-header">
@@ -1262,7 +1272,7 @@ function renderHistorial(){
         <div class="hist-item"><span class="hist-item-lbl">Pallet</span><span class="hist-item-val">📦 Pallet ${h.pallet}</span></div>
         <div class="hist-item"><span class="hist-item-lbl">Tipo</span><span class="hist-item-val">${h.tipo}</span></div>
         <div class="hist-item"><span class="hist-item-lbl">Descuento stock</span><span class="hist-item-val">${h.qty_descontada} unidad${h.qty_descontada!==1?"es":""} (${h.stock_antes}→${h.stock_despues})</span></div>
-        ${costoActual!=null?`<div class="hist-item"><span class="hist-item-lbl">💰 Costo material</span><span class="hist-item-val" style="font-weight:700;color:#1e5c1e">USD ${costoActual.toFixed(2)} · ${h.kg_usados} kg${precioCambio?` <span style="font-weight:500;color:var(--text3)">(antes USD ${h.costo_usd.toFixed(2)})</span>`:""}</span></div>`:(h.costo_usd!=null?`<div class="hist-item"><span class="hist-item-lbl">💰 Costo material</span><span class="hist-item-val" style="font-weight:700;color:#1e5c1e">USD ${h.costo_usd.toFixed(2)} · ${h.kg_usados} kg</span></div>`:"")}
+        ${costoActual!=null?`<div class="hist-item"><span class="hist-item-lbl">💰 Costo material</span><span class="hist-item-val" style="font-weight:700;color:#1e5c1e">USD ${costoActual.toFixed(2)} · ${kgTotal} kg${mult>1?` <span style="font-weight:500;color:var(--text3)">(${mult} u.)</span>`:""}${precioCambio?` <span style="font-weight:500;color:var(--text3)">(antes USD ${costoAntes.toFixed(2)})</span>`:""}</span></div>`:(costoAntes!=null?`<div class="hist-item"><span class="hist-item-lbl">💰 Costo material</span><span class="hist-item-val" style="font-weight:700;color:#1e5c1e">USD ${costoAntes.toFixed(2)} · ${kgTotal} kg${mult>1?` <span style="font-weight:500;color:var(--text3)">(${mult} u.)</span>`:""}</span></div>`:"")}
         <div class="hist-item"><span class="hist-item-lbl">% utilizado</span>
           <div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-bar-fill" style="width:${h.pct}%"></div></div><span style="font-size:13px;font-weight:700">${h.pct}%</span></div>
         </div>
@@ -1272,6 +1282,7 @@ function renderHistorial(){
       </div>
       <div style="margin-top:10px;display:flex;justify-content:flex-end">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button onclick="editarConsumo(${h.id})" style="height:28px;padding:0 12px;background:none;border:1px solid #c8c5be;border-radius:6px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer" title="Editar nombre del proyecto">✏️ Editar</button>
           ${h.anulado
             ? `<span style="font-size:12px;color:#999;font-style:italic">🚫 Anulado</span>`
             : `<button onclick="anularConsumo(${h.id})" style="height:28px;padding:0 12px;background:none;border:1px solid #e04040;border-radius:6px;color:#b22020;font-size:12px;font-weight:600;cursor:pointer">↩ Anular</button>`
@@ -1283,6 +1294,18 @@ function renderHistorial(){
   `;}).join("");
 }
 
+function editarConsumo(id){
+  const h=historial.find(x=>x.id===id);
+  if(!h)return;
+  const nuevo=prompt("Nombre del proyecto:",h.proyecto||"");
+  if(nuevo===null)return;
+  const limpio=nuevo.trim();
+  if(!limpio){showToast("⚠️ El nombre no puede quedar vacío");return;}
+  h.proyecto=limpio;
+  renderHistorial();
+  guardarEnServidor();
+  showToast("✏️ Nombre actualizado");
+}
 function eliminarConsumo(id){
   if(!confirm("¿Eliminar este registro del historial? El stock NO se modifica."))return;
   historial=historial.filter(x=>x.id!==id);
