@@ -799,7 +799,7 @@ const STD = {
   "Inox 316":       {esp:["0.5mm","0.8mm","1mm","1.2mm","1.5mm","2mm","2.5mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],med:["1000x2000","1220x2440","1250x2500","1500x3000","2000x4000"]},
   "Inox 430":       {esp:["0.4mm","0.5mm","0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm"],med:["1000x2000","1220x2440","1250x2500","1500x3000"]},
   "Galvanizada":    {esp:["0.4mm","0.5mm","0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","2.5mm","3mm"],med:["1000x2000","1200x2400","1220x2440","1250x2500","1500x3000"]},
-  "Acero Carbono":  {esp:["0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],med:["1000x2000","1220x2440","1500x3000","2000x6000"]},
+  "Acero Carbono":  {esp:["0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm",'1/8"','3/16"','1/4"','5/16"','3/8"','1/2"','5/8"','3/4"'],med:["1000x2000","1220x2440","1500x3000","2000x6000"]},
   "Acero Descapado":{esp:["0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],med:["1000x2000","1220x2440","1500x3000","2000x6000"]},
   "Acero Corten":   {esp:["1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],med:["1000x2000","1220x2440","1500x3000","2000x6000"]},
 };
@@ -961,9 +961,26 @@ function updatePrecio(id, val) {
   if (it) { it.precio = parseFloat(val) || 0; guardarEnServidor(); }
 }
 
+function espesorMm(esp){
+  if(esp==null) return NaN;
+  let s=String(esp).trim();
+  const esPulgada=/["”″]|pulg/i.test(s);
+  s=s.replace(/mm/gi,"").replace(/pulg\w*/gi,"").replace(/["”″'']/g,"").trim();
+  let val;
+  if(s.indexOf("/")>=0){
+    const parts=s.split("/");
+    const a=parseFloat(parts[0]), b=parseFloat(parts[1]);
+    val=(b? a/b : NaN);
+  } else {
+    val=parseFloat(s);
+  }
+  if(isNaN(val)) return NaN;
+  return esPulgada ? val*25.4 : val;
+}
+
 function calcularCostoConsumo(mat, esp, ancho, largo, precioPorKg) {
   if (!ancho || !largo || !precioPorKg) return null;
-  const espNum = parseFloat(esp);
+  const espNum = espesorMm(esp);
   if (isNaN(espNum)) return null;
   const densidad = DENSIDAD[mat] || 7850;
   const areaM2 = (ancho / 1000) * (largo / 1000);
@@ -1537,7 +1554,7 @@ function guardarPrecios(){
 }
 
 function getPrecioDefault(mat, esp){
-  const espNum = parseFloat(esp)||0;
+  const espNum = espesorMm(esp)||0;
   const ml = mat.toLowerCase();
   // Buscar en tabla de precios
   for(const cat of CATEGORIAS_PRECIO){
@@ -1739,7 +1756,7 @@ function cotStock(){
   const mat=document.getElementById("cot-mat").value;
   const esp=parseFloat(document.getElementById("cot-esp").value);
   const arr=(typeof items!=="undefined"&&Array.isArray(items))?items:[];
-  const match=arr.filter(it=>it.mat===mat && Math.abs((parseFloat(it.esp)||-1)-esp)<0.01 && (it.qty||0)>0);
+  const match=arr.filter(it=>it.mat===mat && Math.abs((espesorMm(it.esp)||-1)-esp)<0.01 && (it.qty||0)>0);
   if(!match.length){el.className="warn";el.textContent="Sin stock de "+mat+(isNaN(esp)?"":" "+esp+"mm");return;}
   const total=match.reduce((s,it)=>s+(it.qty||0),0);
   const pals=[...new Set(match.map(it=>it.pallet))].sort((a,b)=>a-b);
