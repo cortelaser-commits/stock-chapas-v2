@@ -614,10 +614,8 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
     </div>
     <div class="modal-field">
       <label>Cantidad a descontar del stock</label>
-      <select id="c-qty">
-        <option value="1">1 unidad</option>
-        <option value="0">0 (solo registrar, no descontar stock)</option>
-      </select>
+      <input type="number" id="c-qty" min="0" value="1" style="width:110px">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Cantidad de chapas que usó el trabajo. Poné 0 para solo registrar sin descontar.</div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
