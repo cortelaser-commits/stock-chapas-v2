@@ -1541,7 +1541,7 @@ function exportarExcel(){
     r.kg+=((h.kg_usados||0)*(h.qty_descontada||1));
     r.costo+=((h.costo_usd||0)*(h.qty_descontada||1));
   });
-  const resRows=[..resumen.values()].sort((a,b)=>b.costo-a.costo).map(r=>({
+  const resRows=Array.from(resumen.values()).sort((a,b)=>b.costo-a.costo).map(r=>({
     "Material":r.mat,
     "Registros":r.consumos,
     "Unidades usadas":r.qty,
