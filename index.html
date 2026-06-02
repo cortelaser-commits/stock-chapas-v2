@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stock Chapas">
 <link rel="apple-touch-icon" href="/icon-192.png">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#f5f4f0;--surface:#fff;--surface2:#f0eeea;--border:#dddbd5;--border2:#c8c5be;--text:#1a1917;--text2:#6b6860;--text3:#9e9b94;--green-bg:#e6f4e6;--green-text:#1e5c1e;--amber-bg:#fef3db;--amber-text:#7a4f00;--red-bg:#fde8e8;--red-text:#8b1c1c;--inox-bg:#e2f0ee;--inox-text:#0f5c4a;--galv-bg:#e4edf8;--galv-text:#1a3f7a;--carb-bg:#ebebeb;--carb-text:#2a2a2a;--desc-bg:#ece8f8;--desc-text:#3a2070;--cort-bg:#fef0e0;--cort-text:#7a3a00;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08)}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -480,7 +481,13 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
           <option>Galvanizada</option><option>Acero Carbono</option><option>Acero Descapado</option><option>Acero Corten</option>
         </select>
       </div>
-      <button class="btn-add" onclick="exportHistorialCSV()">⬇ Exportar historial CSV</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="excel-mes" style="height:34px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface2);color:var(--text)">
+          <option value="">— Todos los meses —</option>
+        </select>
+        <button class="btn-add" onclick="exportarExcel()" style="background:#1e7e44;color:#fff;border-color:#1e7e44">⬇ Exportar Excel</button>
+        <button class="btn-add" onclick="exportHistorialCSV()">⬇ CSV</button>
+      </div>
     </div>
     <div id="hist-content"><div class="hist-empty">No hay consumos registrados aún.</div></div>
   </div>
@@ -853,7 +860,7 @@ async function cargarDesdeServidor(){
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
     setSyncStatus("ok","Sincronizado ✓");
-    inicializarPrecios();render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();
+    inicializarPrecios();render();renderHistorial();poblarSelectorMes();if(typeof renderCotHist==="function")renderCotHist();
   }catch(e){
     setSyncStatus("error","⚠️ Sin conexión al servidor");
     setTimeout(cargarDesdeServidor,8000);
@@ -1348,7 +1355,7 @@ function confirmarConsumo(){
   }
 
   cerrarModal();
-  render();renderHistorial();
+  render();renderHistorial();poblarSelectorMes();
   _apiPost("/stock/consumo", apiPayload);
   const costoMsg=costoConsumo?" · USD "+costoConsumo.costo.toFixed(2):"";
   showToast("✅ Consumo registrado — "+proyecto+costoMsg+(recorteMsg||""));
@@ -1459,6 +1466,121 @@ function anularConsumo(id){
   render();renderHistorial();
   guardarEnServidor();
   showToast("↩ Consumo anulado — stock restaurado");
+}
+
+// Poblar el selector de meses con los meses que tienen registros
+function poblarSelectorMes(){
+  const sel=document.getElementById("excel-mes");
+  const meses=new Map();
+  historial.forEach(h=>{
+    // fecha formato "dd/mm/yyyy hh:mm"
+    const parts=(h.fecha||"").split(" ")[0].split("/");
+    if(parts.length===3){
+      const key=parts[2]+"-"+parts[1]; // "2026-05"
+      const label=new Date(parts[2],parts[1]-1,1).toLocaleDateString("es-UY",{month:"long",year:"numeric"});
+      if(!meses.has(key)) meses.set(key,label);
+    }
+  });
+  // Mantener la opción "todos" y reconstruir el resto
+  sel.innerHTML=`<option value="">— Todos los meses —</option>`;
+  [...meses.entries()].sort((a,b)=>b[0].localeCompare(a[0])).forEach(([key,label])=>{
+    sel.innerHTML+=`<option value="${key}">${label.charAt(0).toUpperCase()+label.slice(1)}</option>`;
+  });
+}
+
+function exportarExcel(){
+  if(typeof XLSX==="undefined"){showToast("⚠️ Librería Excel no cargada, intentá de nuevo");return;}
+  const mesFilter=document.getElementById("excel-mes").value; // "2026-05" o ""
+  const mesLabel=document.getElementById("excel-mes").selectedOptions[0]?.text||"Todo el historial";
+
+  // Filtrar historial por mes
+  const hist=historial.filter(h=>{
+    if(!mesFilter)return true;
+    const parts=(h.fecha||"").split(" ")[0].split("/");
+    if(parts.length!==3)return false;
+    return parts[2]+"-"+parts[1]===mesFilter;
+  });
+
+  const wb=XLSX.utils.book_new();
+
+  // ── Hoja 1: Historial ───────────────────────────────────────────────────
+  const histRows=hist.map(h=>({
+    "Fecha":h.fecha||"",
+    "Proyecto":h.proyecto||"",
+    "Presupuesto":h.presup||"",
+    "Operario":h.operario||"",
+    "Chapa":h.chapa||"",
+    "Medida orig.":h.medOrig||h.med||"",
+    "Medida corte":h.medCorte||"",
+    "Pallet":h.pallet,
+    "Tipo":h.tipo||"",
+    "Tipo uso":h.tipoUso||"",
+    "% utilizado":h.pct||0,
+    "Qty descontada":h.qty_descontada||0,
+    "Stock antes":h.stock_antes||0,
+    "Stock después":h.stock_despues||0,
+    "Kg usados":h.kg_usados||"",
+    "USD/kg":h.precio_usd_kg||"",
+    "Costo USD":h.costo_usd||"",
+    "Descripción":h.desc||"",
+    "Anulado":h.anulado?"Sí":"No"
+  }));
+  const wsHist=XLSX.utils.json_to_sheet(histRows);
+  // Ancho de columnas
+  wsHist["!cols"]=[{wch:18},{wch:22},{wch:14},{wch:14},{wch:18},{wch:14},{wch:14},{wch:7},{wch:12},{wch:10},{wch:12},{wch:14},{wch:12},{wch:13},{wch:10},{wch:8},{wch:10},{wch:24},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, wsHist, "Historial");
+
+  // ── Hoja 2: Resumen por material ────────────────────────────────────────
+  const resumen=new Map();
+  hist.filter(h=>!h.anulado).forEach(h=>{
+    const mat=h.mat||h.chapa||"";
+    if(!resumen.has(mat)) resumen.set(mat,{mat,consumos:0,qty:0,kg:0,costo:0});
+    const r=resumen.get(mat);
+    r.consumos++;
+    r.qty+=(h.qty_descontada||0);
+    r.kg+=((h.kg_usados||0)*(h.qty_descontada||1));
+    r.costo+=((h.costo_usd||0)*(h.qty_descontada||1));
+  });
+  const resRows=[..resumen.values()].sort((a,b)=>b.costo-a.costo).map(r=>({
+    "Material":r.mat,
+    "Registros":r.consumos,
+    "Unidades usadas":r.qty,
+    "Kg totales":Math.round(r.kg*100)/100,
+    "Costo total USD":Math.round(r.costo*100)/100
+  }));
+  // Fila de totales
+  if(resRows.length){
+    resRows.push({
+      "Material":"TOTAL",
+      "Registros":resRows.reduce((a,r)=>a+r["Registros"],0),
+      "Unidades usadas":resRows.reduce((a,r)=>a+r["Unidades usadas"],0),
+      "Kg totales":Math.round(resRows.reduce((a,r)=>a+r["Kg totales"],0)*100)/100,
+      "Costo total USD":Math.round(resRows.reduce((a,r)=>a+r["Costo total USD"],0)*100)/100
+    });
+  }
+  const wsRes=XLSX.utils.json_to_sheet(resRows);
+  wsRes["!cols"]=[{wch:20},{wch:10},{wch:16},{wch:14},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsRes, "Resumen por material");
+
+  // ── Hoja 3: Stock actual ─────────────────────────────────────────────────
+  const stockRows=items.map(it=>({
+    "Pallet":it.pallet,
+    "Material":it.mat,
+    "Espesor":it.esp,
+    "Medidas":it.med,
+    "Tipo":it.tipo,
+    "Cantidad":it.qty,
+    "USD/kg":it.precio||"",
+    "Estado":getStatus(it.qty)==="crit"?"Sin stock":getStatus(it.qty)==="warn"?"Stock bajo":"OK"
+  })).sort((a,b)=>a["Pallet"]-b["Pallet"]);
+  const wsStock=XLSX.utils.json_to_sheet(stockRows);
+  wsStock["!cols"]=[{wch:7},{wch:18},{wch:9},{wch:14},{wch:14},{wch:10},{wch:8},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsStock, "Stock actual");
+
+  // Nombre del archivo
+  const nombreMes=mesFilter?mesFilter:"todo";
+  XLSX.writeFile(wb,`stock_chapas_${nombreMes}.xlsx`);
+  showToast("⬇ Excel exportado — "+mesLabel);
 }
 
 function exportHistorialCSV(){
