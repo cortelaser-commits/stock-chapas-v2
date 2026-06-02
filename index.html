@@ -641,6 +641,11 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
         <button id="stats-btn-kg" onclick="setStatsModo('kg')" style="padding:7px 18px;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--text);color:#fff;border:1px solid var(--text)">Kg consumidos</button>
         <button id="stats-btn-costo" onclick="setStatsModo('costo')" style="padding:7px 18px;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--surface2);color:var(--text2);border:1px solid var(--border)">Costo USD</button>
       </div>
+      <select id="stats-grupo" onchange="renderStats()" style="height:34px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface2);color:var(--text)">
+        <option value="mat">Por material</option>
+        <option value="esp">Por espesor</option>
+        <option value="mat+esp">Material + espesor</option>
+      </select>
       <select id="stats-meses" onchange="renderStats()" style="height:34px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface2);color:var(--text)">
         <option value="6">Últimos 6 meses</option>
         <option value="12">Últimos 12 meses</option>
@@ -2314,6 +2319,25 @@ function setStatsModo(modo){
   renderStats();
 }
 
+function _statsGrupoKey(h){
+  const grupo=document.getElementById("stats-grupo").value;
+  if(grupo==="esp") return h.esp||"—";
+  if(grupo==="mat+esp") return (h.mat||"")+" "+(h.esp||"");
+  return h.mat||"";
+}
+
+// Paleta para espesores (colores variados)
+const _ESP_PALETA=["#1a3f7a","#0f5c4a","#7a3a00","#2a2a2a","#555","#1a7a64","#6a2080","#7a5a00","#2d6e9e","#a03030","#3a7a30","#7a6000","#404080","#806040","#408060"];
+const _colorCache={};
+function _getColor(key){
+  if(MAT_COLORES[key]) return MAT_COLORES[key];
+  if(!_colorCache[key]){
+    const keys=Object.keys(_colorCache);
+    _colorCache[key]=_ESP_PALETA[keys.length%_ESP_PALETA.length];
+  }
+  return _colorCache[key];
+}
+
 function renderStats(){
   if(typeof Chart==="undefined")return;
   const n=parseInt(document.getElementById("stats-meses").value)||6;
@@ -2328,36 +2352,38 @@ function renderStats(){
     meses.push({key,label});
   }
 
-  // Filtrar al rango real si es "todo"
   const mesesConDatos=new Set(historial.map(h=>{
     const p=(h.fecha||"").split(" ")[0].split("/");
     return p.length===3?p[2]+"-"+p[1].padStart(2,"0"):"";
   }));
   const mesesFiltrados=n===0?meses.filter(m=>mesesConDatos.has(m.key)):meses;
 
-  // Agrupar por mes y material
-  const materiales=[...new Set(historial.map(h=>h.mat).filter(Boolean))].sort();
-  const porMesMat={};
+  // Agrupar por mes y grupo seleccionado
+  const grupos=new Set();
+  const porMesGrupo={};
   historial.filter(h=>!h.anulado).forEach(h=>{
     const p=(h.fecha||"").split(" ")[0].split("/");
     if(p.length!==3)return;
-    const key=p[2]+"-"+p[1].padStart(2,"0");
-    if(!mesesFiltrados.find(m=>m.key===key))return;
-    if(!porMesMat[key])porMesMat[key]={};
-    const mat=h.mat||"";
-    if(!porMesMat[key][mat])porMesMat[key][mat]={kg:0,costo:0};
-    porMesMat[key][mat].kg+=((h.kg_usados||0)*(h.qty_descontada||1));
-    porMesMat[key][mat].costo+=((h.costo_usd||0)*(h.qty_descontada||1));
+    const mesKey=p[2]+"-"+p[1].padStart(2,"0");
+    if(!mesesFiltrados.find(m=>m.key===mesKey))return;
+    const g=_statsGrupoKey(h);
+    grupos.add(g);
+    if(!porMesGrupo[mesKey])porMesGrupo[mesKey]={};
+    if(!porMesGrupo[mesKey][g])porMesGrupo[mesKey][g]={kg:0,costo:0};
+    porMesGrupo[mesKey][g].kg+=((h.kg_usados||0)*(h.qty_descontada||1));
+    porMesGrupo[mesKey][g].costo+=((h.costo_usd||0)*(h.qty_descontada||1));
   });
 
+  const gruposOrden=[...grupos].sort();
   const labels=mesesFiltrados.map(m=>m.label);
-  const datasets=materiales.map(mat=>({
-    label:mat,
-    data:mesesFiltrados.map(m=>Math.round(((porMesMat[m.key]?.[mat]?.[_statsModo])||0)*100)/100),
-    backgroundColor:MAT_COLORES[mat]||"#888",
+  const datasets=gruposOrden.map(g=>({
+    label:g,
+    data:mesesFiltrados.map(m=>Math.round(((porMesGrupo[m.key]?.[g]?.[_statsModo])||0)*100)/100),
+    backgroundColor:_getColor(g),
     borderRadius:3,stack:"a"
   })).filter(d=>d.data.some(v=>v>0));
 
+  const tituloGrupo=document.getElementById("stats-grupo").value==="esp"?"espesor":document.getElementById("stats-grupo").value==="mat+esp"?"material y espesor":"material";
   const ctx=document.getElementById("stats-chart").getContext("2d");
   if(_statsChart)_statsChart.destroy();
   _statsChart=new Chart(ctx,{
@@ -2366,8 +2392,8 @@ function renderStats(){
     options:{
       responsive:true,
       plugins:{
-        legend:{position:"bottom",labels:{font:{size:12},padding:16}},
-        title:{display:true,text:_statsModo==="kg"?"Kg consumidos por material":"Costo USD por material",font:{size:14,weight:"600"}}
+        legend:{position:"bottom",labels:{font:{size:12},padding:12,boxWidth:14}},
+        title:{display:true,text:(_statsModo==="kg"?"Kg consumidos":"Costo USD")+" por "+tituloGrupo,font:{size:14,weight:"600"}}
       },
       scales:{
         x:{stacked:true,grid:{display:false}},
@@ -2376,26 +2402,26 @@ function renderStats(){
     }
   });
 
-  // Tabla resumen debajo del gráfico
-  const totalesMat=materiales.map(mat=>{
-    const kg=mesesFiltrados.reduce((a,m)=>(a+(porMesMat[m.key]?.[mat]?.kg||0)),0);
-    const costo=mesesFiltrados.reduce((a,m)=>(a+(porMesMat[m.key]?.[mat]?.costo||0)),0);
-    return {mat,kg:Math.round(kg*100)/100,costo:Math.round(costo*100)/100};
-  }).filter(r=>r.kg>0||r.costo>0).sort((a,b)=>b.costo-a.costo);
+  // Tabla resumen
+  const totales=gruposOrden.map(g=>{
+    const kg=mesesFiltrados.reduce((a,m)=>(a+(porMesGrupo[m.key]?.[g]?.kg||0)),0);
+    const costo=mesesFiltrados.reduce((a,m)=>(a+(porMesGrupo[m.key]?.[g]?.costo||0)),0);
+    return {g,kg:Math.round(kg*100)/100,costo:Math.round(costo*100)/100};
+  }).filter(r=>r.kg>0||r.costo>0).sort((a,b)=>b[_statsModo]-a[_statsModo]);
 
-  const totalKg=Math.round(totalesMat.reduce((a,r)=>a+r.kg,0)*100)/100;
-  const totalCosto=Math.round(totalesMat.reduce((a,r)=>a+r.costo,0)*100)/100;
+  const totalKg=Math.round(totales.reduce((a,r)=>a+r.kg,0)*100)/100;
+  const totalCosto=Math.round(totales.reduce((a,r)=>a+r.costo,0)*100)/100;
 
   document.getElementById("stats-tabla").innerHTML=`
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--surface2)">
-        <th style="padding:10px 14px;text-align:left;font-weight:700;border-bottom:1px solid var(--border)">Material</th>
+        <th style="padding:10px 14px;text-align:left;font-weight:700;border-bottom:1px solid var(--border)">${tituloGrupo.charAt(0).toUpperCase()+tituloGrupo.slice(1)}</th>
         <th style="padding:10px 14px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">Kg consumidos</th>
         <th style="padding:10px 14px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">Costo USD</th>
       </tr></thead>
       <tbody>
-        ${totalesMat.map(r=>`<tr>
-          <td style="padding:9px 14px;border-bottom:1px solid var(--border)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${MAT_COLORES[r.mat]||"#888"};margin-right:8px;vertical-align:middle"></span>${r.mat}</td>
+        ${totales.map(r=>`<tr>
+          <td style="padding:9px 14px;border-bottom:1px solid var(--border)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${_getColor(r.g)};margin-right:8px;vertical-align:middle"></span>${r.g}</td>
           <td style="padding:9px 14px;text-align:right;border-bottom:1px solid var(--border)">${r.kg>0?r.kg+" kg":"—"}</td>
           <td style="padding:9px 14px;text-align:right;border-bottom:1px solid var(--border);font-weight:600">${r.costo>0?"USD "+r.costo.toFixed(2):"—"}</td>
         </tr>`).join("")}
