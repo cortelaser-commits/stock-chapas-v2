@@ -860,11 +860,15 @@ async function guardarEnServidor(){
 setInterval(async()=>{
   if(!conectado)return;
   try{
-    const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
-    const data=await r.json();
-    if(data&&data.ts&&data.ts>(window._lastTs||0)){items=data.items;nextId=data.nextId||100;historial=data.historial||[];window._lastTs=data.ts;actualizarFecha(data.ts);render();renderHistorial();}
+    const rt=await fetch(API+"/ts",{signal:AbortSignal.timeout(15000)});
+    const meta=await rt.json();
+    if(meta&&meta.ts&&meta.ts>(window._lastTs||0)){
+      const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
+      const data=await r.json();
+      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;window._lastTs=data.ts;actualizarFecha(data.ts);render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();}
+    }
   }catch(e){}
-},20000);
+},30000);
 
 function actualizarFecha(ts){
   const d=ts?new Date(ts):new Date();
