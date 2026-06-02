@@ -88,6 +88,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && req.url === '/ts') {
+    if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end('{"error":"db no lista"}'); return; }
+    try {
+      const doc = await db.collection(COL_NAME).findOne({ _id: 'stock' }, { projection: { 'data.ts': 1 } });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ts: doc?.data?.ts || 0 }));
+    } catch(e) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ts":0}'); }
+    return;
+  }
+
   if (req.method === 'GET' && req.url === '/stock') {
     if (!db) { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end('{"error":"db no lista"}'); return; }
     const data = await leerStock();
