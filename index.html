@@ -386,7 +386,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input type="text" id="search" placeholder="Buscar por material, espesor, medida..." oninput="render()">
+        <input type="text" id="search" placeholder="Buscar por material, espesor, medida..." oninput="clearTimeout(_searchTimer);_searchTimer=setTimeout(render,SEARCH_DEBOUNCE_MS)">
       </div>
       <div class="filter-btns">
         <button class="fbtn active" data-f="all" onclick="setFilter(this)">Todas</button>
@@ -473,7 +473,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
   <div id="tab-historial" class="tab-content">
     <div class="hist-header">
       <div class="hist-filters">
-        <input type="text" id="hist-search" placeholder="Buscar proyecto, operario..." oninput="renderHistorial()" style="width:200px">
+        <input type="text" id="hist-search" placeholder="Buscar proyecto, operario..." oninput="clearTimeout(_searchTimer);_searchTimer=setTimeout(renderHistorial,SEARCH_DEBOUNCE_MS)" style="width:200px">
         <select id="hist-filter-mat" onchange="renderHistorial()">
           <option value="">Todos los materiales</option>
           <option>Inox 304</option><option>Inox 316</option><option>Inox 430</option>
@@ -823,6 +823,16 @@ const STD = {
 };
 
 let nextId=100, items=[], historial=[], cotizaciones=[], cotNextNum=1, filter="all", modalItemId=null, conectado=false;
+let _saveTimer=null, _toastTimer=null, _lastSavedHash=null, _searchTimer=null;
+const SYNC_INTERVAL_MS=30000, TOAST_MS=2500, SAVE_DEBOUNCE_MS=1500, SEARCH_DEBOUNCE_MS=300, FETCH_TIMEOUT_MS=45000;
+
+function _dataHash(){
+  // Checksum liviano para detectar si los datos realmente cambiaron
+  let h=0;
+  for(const it of items) h=(h*31+it.id*17+it.qty*7+(it.precio||0)*3)>>>0;
+  h=(h*31+historial.length*13+items.length*7)>>>0;
+  return h;
+}
 
 function setSyncStatus(estado,msg){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
@@ -840,6 +850,7 @@ async function cargarDesdeServidor(){
     if(!r.ok)throw new Error();
     const data=await r.json();
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
+    _lastSavedHash=_dataHash();
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();
   }catch(e){
@@ -848,28 +859,81 @@ async function cargarDesdeServidor(){
   }
 }
 
-async function guardarEnServidor(){
+// ─── API quirúrgica — cada operación manda solo lo que cambió (~200B vs 50KB) ──
+
+function _syncTs(ts){ if(ts){ window._lastTs=ts; actualizarFecha(ts); _lastSavedHash=_dataHash(); } }
+
+async function _apiPatch(path, body){
+  setSyncStatus("syncing","Guardando...");
+  try{
+    const r=await fetch(API+path,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
+    if(!r.ok)throw new Error();
+    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); return true;
+  }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
+}
+
+async function _apiPost(path, body){
+  setSyncStatus("syncing","Guardando...");
+  try{
+    const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
+    if(!r.ok)throw new Error();
+    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); return true;
+  }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
+}
+
+async function _apiDelete(path, body){
+  setSyncStatus("syncing","Guardando...");
+  try{
+    const opts={method:"DELETE",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)};
+    if(body) opts.body=JSON.stringify(body);
+    const r=await fetch(API+path,opts);
+    if(!r.ok)throw new Error();
+    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); return true;
+  }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
+}
+
+// ─── Guardado completo — solo para laser, cotizaciones y anulaciones ─────────
+
+// Guarda con debounce: múltiples cambios rápidos se colapsan en 1 solo POST
+function guardarEnServidor(){
+  // Feedback visual inmediato sin esperar el debounce
+  const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
+  dot.className="sync-dot syncing";txt.textContent="Pendiente...";
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(_doSave, SAVE_DEBOUNCE_MS);
+}
+
+async function _doSave(){
+  _saveTimer=null; // limpiar para que el polling pueda correr después
+  const hash=_dataHash();
+  if(hash===_lastSavedHash){
+    setSyncStatus("ok","Guardado ✓");
+    return; // datos no cambiaron, no gastar tráfico
+  }
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Guardando...";
   try{
-    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(45000)});
+    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
     if(!r.ok)throw new Error();
+    _lastSavedHash=_dataHash();
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
   }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
 }
 
 setInterval(async()=>{
   if(!conectado)return;
+  // No sincronizar si hay un guardado pendiente (evita pisar cambios locales)
+  if(_saveTimer!==null)return;
   try{
     const rt=await fetch(API+"/ts",{signal:AbortSignal.timeout(15000)});
     const meta=await rt.json();
     if(meta&&meta.ts&&meta.ts>(window._lastTs||0)){
       const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
       const data=await r.json();
-      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;window._lastTs=data.ts;actualizarFecha(data.ts);render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();}
+      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();}
     }
   }catch(e){}
-},30000);
+},SYNC_INTERVAL_MS);
 
 function actualizarFecha(ts){
   const d=ts?new Date(ts):new Date();
@@ -877,7 +941,20 @@ function actualizarFecha(ts){
   window._lastTs=ts||Date.now();
 }
 
-function showToast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2500);}
+function showToast(msg){clearTimeout(_toastTimer);const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");_toastTimer=setTimeout(()=>t.classList.remove("show"),TOAST_MS);}
+
+// Invalidar caché de texto de búsqueda cuando llegan datos del servidor
+function _invalidarCacheTexto(){items.forEach(it=>{ delete it._txt; });}
+
+function matches(it, q){
+  // _txt se cachea en el ítem para no recalcular en cada render
+  if(!it._txt) it._txt=(it.mat+" "+it.esp+" "+it.med+" "+it.tipo).toLowerCase();
+  if(!it._txt.includes(q))return false;
+  if(filter==="warn")return getStatus(it.qty)==="warn";
+  if(filter==="crit")return getStatus(it.qty)==="crit";
+  if(filter==="all")return true;
+  return it.mat.toLowerCase().includes(filter.toLowerCase());
+}
 function updateEspesores(){const mat=document.getElementById("n-mat").value,sel=document.getElementById("n-esp");sel.innerHTML=(STD[mat]?.esp||[]).map(e=>`<option>${e}</option>`).join("");updateMedidas();}
 function updateMedidas(){const mat=document.getElementById("n-mat").value,esp=document.getElementById("n-esp").value,meds=STD[mat]?.med||[];document.getElementById("n-med-std").innerHTML=`<option value="">— medida libre —</option>`+meds.map(m=>`<option value="${m}">${m} mm</option>`).join("");document.getElementById("std-hint").textContent=mat&&esp?`Medidas estándar para ${mat} ${esp}: ${meds.join(" · ")} mm`:"";}
 updateEspesores();
@@ -890,9 +967,11 @@ function matches(it){const q=document.getElementById("search").value.toLowerCase
 function render(){
   const pallets=[...new Set(items.map(x=>x.pallet))].sort((a,b)=>a-b);
   const cont=document.getElementById("main-content");
+  // Cachear el valor de búsqueda una sola vez para todo el render
+  const q=document.getElementById("search").value.toLowerCase();
   let html="",any=false;
   pallets.forEach(p=>{
-    const rows=items.filter(it=>it.pallet===p&&matches(it));
+    const rows=items.filter(it=>it.pallet===p&&matches(it,q));
     if(!rows.length)return;any=true;
     const hasCrit=rows.some(x=>getStatus(x.qty)==="crit"),hasWarn=rows.some(x=>getStatus(x.qty)==="warn");
     html+=`<div class="pallet-section">
@@ -966,8 +1045,8 @@ function render(){
   cont.innerHTML=html;updateStats();
 }
 
-function changeQty(id,d){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,it.qty+d);render();guardarEnServidor();}}
-function updateQty(id,v){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,parseInt(v)||0);render();guardarEnServidor();}}
+function changeQty(id,d){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,it.qty+d);render();_apiPatch(`/stock/item/${id}`,{qty:it.qty});}}
+function updateQty(id,v){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,parseInt(v)||0);render();_apiPatch(`/stock/item/${id}`,{qty:it.qty});}}
 // Precios USD/kg por defecto según material y espesor
 
 
@@ -980,7 +1059,7 @@ const DENSIDAD = {
 
 function updatePrecio(id, val) {
   const it = items.find(x => x.id === id);
-  if (it) { it.precio = parseFloat(val) || 0; guardarEnServidor(); }
+  if (it) { it.precio = parseFloat(val) || 0; _apiPatch(`/stock/item/${id}`,{precio:it.precio}); }
 }
 
 function espesorMm(esp){
@@ -1018,13 +1097,18 @@ function eliminarUnidad(id){
   it.qty=Math.max(0,it.qty-1);
   if(it.qty===0){
     if(!window.agotados)window.agotados=[];
-    window.agotados.push({mat:it.mat,esp:it.esp,pallet:it.pallet});
+    const agotado={mat:it.mat,esp:it.esp,pallet:it.pallet};
+    window.agotados.push(agotado);
     items=items.filter(x=>x.id!==it.id);
+    render();
+    _apiDelete(`/stock/item/${id}`,{agotado});
+  } else {
+    render();
+    _apiPatch(`/stock/item/${id}`,{qty:it.qty});
   }
-  render();guardarEnServidor();
   showToast("🗑 1 unidad eliminada del stock");
 }
-function deleteRow(id){if(confirm("¿Eliminar toda esta fila del stock?")){items=items.filter(x=>x.id!==id);render();guardarEnServidor();showToast("🗑 Chapa eliminada");}}
+function deleteRow(id){if(confirm("¿Eliminar toda esta fila del stock?")){items=items.filter(x=>x.id!==id);render();_apiDelete(`/stock/item/${id}`);showToast("🗑 Chapa eliminada");}}
 
 function parseMed(str){
   const parts=(str||"").replace(/[xX×]/,"x").split("x").map(s=>parseFloat(s.trim()));
@@ -1149,20 +1233,24 @@ function addRow(){
   const t=document.getElementById("n-tipo").value,q=parseInt(document.getElementById("n-qty").value)||0;
   if(!m)return;
   const precioDefault=getPrecioDefault(m,e||"0");
-  items.push({id:nextId++,pallet:p,mat:m,esp:e||"—",med,tipo:t,qty:q,precio:precioDefault});
+  const nuevoItem={id:nextId++,pallet:p,mat:m,esp:e||"—",med,tipo:t,qty:q,precio:precioDefault};
+  items.push(nuevoItem);
   document.getElementById("n-med-custom").value="";document.getElementById("n-qty").value="";
-  render();guardarEnServidor();showToast("✅ Chapa agregada al Pallet "+p);
+  render();_apiPost("/stock/item",{item:nuevoItem,nextId});showToast("✅ Chapa agregada al Pallet "+p);
 }
 function setFilter(btn){filter=btn.dataset.f;document.querySelectorAll(".fbtn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");render();}
 function updateStats(){
-  const warn=items.filter(x=>getStatus(x.qty)==="warn"),crit=items.filter(x=>getStatus(x.qty)==="crit");
-  document.getElementById("s-total").textContent=items.reduce((a,b)=>a+b.qty,0);
-  document.getElementById("s-pallets").textContent=new Set(items.map(x=>x.pallet)).size;
-  document.getElementById("s-warn").textContent=warn.length;
+  // Un solo loop en lugar de 4 pasadas separadas
+  let total=0,warnCount=0,critCount=0;
+  const palletSet=new Set();
+  for(const x of items){total+=x.qty;palletSet.add(x.pallet);const s=getStatus(x.qty);if(s==="warn")warnCount++;else if(s==="crit")critCount++;}
+  document.getElementById("s-total").textContent=total;
+  document.getElementById("s-pallets").textContent=palletSet.size;
+  document.getElementById("s-warn").textContent=warnCount;
   const agotados=window.agotados||[];
-  document.getElementById("s-crit").textContent=crit.length+agotados.length;
+  document.getElementById("s-crit").textContent=critCount+agotados.length;
   const bc=document.getElementById("alert-crit");
-  const todos=[...crit,...agotados];
+  const todos=[...items.filter(x=>getStatus(x.qty)==="crit"),...agotados];
   const sig=todos.map(x=>x.mat+"|"+x.esp+"|"+x.pallet).sort().join("·");
   window._alertaStockSig=sig;
   if(todos.length>0 && window._alertaDismiss!==sig){
@@ -1228,35 +1316,39 @@ function confirmarConsumo(){
   };
   historial.unshift(consumo);
 
+  // Preparar payload para el servidor antes de mutar el estado local
+  const apiPayload={consumo};
+  let deleteItem=false, agotado=null, nuevoRecorte=null;
+
   if(descuento>0){
     it.qty=stockDespues;
     if(it.qty===0){
       if(!window.agotados)window.agotados=[];
-      window.agotados.push({mat:it.mat,esp:it.esp,pallet:it.pallet});
+      agotado={mat:it.mat,esp:it.esp,pallet:it.pallet};
+      window.agotados.push(agotado);
       items=items.filter(x=>x.id!==it.id);
+      deleteItem=true;
     }
+    apiPayload.itemId=it.id;
+    apiPayload.newQty=stockDespues;
+    apiPayload.deleteItem=deleteItem;
+    if(agotado) apiPayload.agotado=agotado;
   }
 
   // Generar recorte automático si corresponde
   let recorteMsg="";
   if(window._recorteGenerado&&descuento>0){
     const r=window._recorteGenerado;
-    const nuevoRecorte={
-      id:nextId++,
-      pallet:it.pallet,
-      mat:it.mat,
-      esp:it.esp,
-      med:r.w+"x"+r.h,
-      tipo:"Recorte",
-      qty:1
-    };
+    nuevoRecorte={id:nextId++,pallet:it.pallet,mat:it.mat,esp:it.esp,med:r.w+"x"+r.h,tipo:"Recorte",qty:1};
     items.push(nuevoRecorte);
+    apiPayload.recorte=nuevoRecorte;
+    apiPayload.nextId=nextId;
     recorteMsg=" · ✂️ Recorte "+r.w+"×"+r.h+"mm generado en Pallet "+it.pallet;
   }
 
   cerrarModal();
   render();renderHistorial();
-  guardarEnServidor();
+  _apiPost("/stock/consumo", apiPayload);
   const costoMsg=costoConsumo?" · USD "+costoConsumo.costo.toFixed(2):"";
   showToast("✅ Consumo registrado — "+proyecto+costoMsg+(recorteMsg||""));
 }
@@ -1324,14 +1416,14 @@ function editarConsumo(id){
   if(!limpio){showToast("⚠️ El nombre no puede quedar vacío");return;}
   h.proyecto=limpio;
   renderHistorial();
-  guardarEnServidor();
+  _apiPatch(`/stock/consumo/${id}`,{proyecto:limpio});
   showToast("✏️ Nombre actualizado");
 }
 function eliminarConsumo(id){
   if(!confirm("¿Eliminar este registro del historial? El stock NO se modifica."))return;
   historial=historial.filter(x=>x.id!==id);
   renderHistorial();
-  guardarEnServidor();
+  _apiDelete(`/stock/consumo/${id}`);
   showToast("🗑 Registro eliminado del historial");
 }
 function anularConsumo(id){
@@ -1499,15 +1591,15 @@ function renderLaser(){
 
 function changeLaser(id,d){
   const it=laserItems.find(x=>x.id===id);
-  if(it){it.qty=Math.max(0,it.qty+d);renderLaser();}
+  if(it){it.qty=Math.max(0,it.qty+d);renderLaser();_apiPatch(`/stock/laser/${id}`,{qty:it.qty});}
 }
 function updateLaserQty(id,v){
   const it=laserItems.find(x=>x.id===id);
-  if(it){it.qty=Math.max(0,parseInt(v)||0);renderLaser();}
+  if(it){it.qty=Math.max(0,parseInt(v)||0);renderLaser();_apiPatch(`/stock/laser/${id}`,{qty:it.qty});}
 }
 function deleteLaser(id){
   if(confirm("¿Eliminar este insumo?"))
-  {laserItems=laserItems.filter(x=>x.id!==id);renderLaser();}
+  {laserItems=laserItems.filter(x=>x.id!==id);renderLaser();guardarEnServidor();}
 }
 function addLaser(){
   const cat=document.getElementById("l-cat").value;
@@ -1518,7 +1610,7 @@ function addLaser(){
   laserItems.push({id:laserNextId++,cat,desc,qty,min});
   document.getElementById("l-desc").value="";
   document.getElementById("l-qty").value="";
-  renderLaser();
+  renderLaser();guardarEnServidor();
   showToast("✅ Insumo agregado");
 }
 
