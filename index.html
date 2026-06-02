@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Stock Chapas">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{--bg:#f5f4f0;--surface:#fff;--surface2:#f0eeea;--border:#dddbd5;--border2:#c8c5be;--text:#1a1917;--text2:#6b6860;--text3:#9e9b94;--green-bg:#e6f4e6;--green-text:#1e5c1e;--amber-bg:#fef3db;--amber-text:#7a4f00;--red-bg:#fde8e8;--red-text:#8b1c1c;--inox-bg:#e2f0ee;--inox-text:#0f5c4a;--galv-bg:#e4edf8;--galv-text:#1a3f7a;--carb-bg:#ebebeb;--carb-text:#2a2a2a;--desc-bg:#ece8f8;--desc-text:#3a2070;--cort-bg:#fef0e0;--cort-text:#7a3a00;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08)}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -380,6 +381,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
     <div class="tab" onclick="switchTab('precios',this)">💰 Precios</div>
     <div class="tab" onclick="switchTab('laser',this)">⚡ Láser</div>
     <div class="tab" onclick="switchTab('cotizador',this)">🏷️ Cotizador</div>
+    <div class="tab" onclick="switchTab('stats',this);renderStats()">📈 Estadísticas</div>
   </div>
 
   <!-- TAB STOCK -->
@@ -631,6 +633,26 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
     </div>
   </div>
 </div>
+
+  <!-- TAB ESTADÍSTICAS -->
+  <div id="tab-stats" class="tab-content">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="display:flex;gap:8px">
+        <button id="stats-btn-kg" onclick="setStatsModo('kg')" style="padding:7px 18px;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--text);color:#fff;border:1px solid var(--text)">Kg consumidos</button>
+        <button id="stats-btn-costo" onclick="setStatsModo('costo')" style="padding:7px 18px;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--surface2);color:var(--text2);border:1px solid var(--border)">Costo USD</button>
+      </div>
+      <select id="stats-meses" onchange="renderStats()" style="height:34px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface2);color:var(--text)">
+        <option value="6">Últimos 6 meses</option>
+        <option value="12">Últimos 12 meses</option>
+        <option value="24">Últimos 24 meses</option>
+        <option value="0">Todo</option>
+      </select>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)">
+      <canvas id="stats-chart" style="max-height:380px"></canvas>
+    </div>
+    <div id="stats-tabla" style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)"></div>
+  </div>
 
   <!-- TAB COTIZADOR -->
   <div id="tab-cotizador" class="tab-content">
@@ -1577,6 +1599,51 @@ function exportarExcel(){
   wsStock["!cols"]=[{wch:7},{wch:18},{wch:9},{wch:14},{wch:14},{wch:10},{wch:8},{wch:12}];
   XLSX.utils.book_append_sheet(wb, wsStock, "Stock actual");
 
+  // ── Hoja 4: Consumo por mes y material ──────────────────────────────────
+  const materiales=[...new Set(historial.map(h=>h.mat).filter(Boolean))].sort();
+  const mesesMap=new Map();
+  hist.filter(h=>!h.anulado).forEach(h=>{
+    const p=(h.fecha||"").split(" ")[0].split("/");
+    if(p.length!==3)return;
+    const key=p[2]+"/"+p[1];
+    if(!mesesMap.has(key))mesesMap.set(key,{});
+    const mat=h.mat||"";
+    if(!mesesMap.get(key)[mat])mesesMap.get(key)[mat]={kg:0,costo:0};
+    mesesMap.get(key)[mat].kg+=((h.kg_usados||0)*(h.qty_descontada||1));
+    mesesMap.get(key)[mat].costo+=((h.costo_usd||0)*(h.qty_descontada||1));
+  });
+  const mesesOrden=Array.from(mesesMap.keys()).sort();
+  // Kg
+  const kgHeader=["Mes",...materiales,"TOTAL kg"];
+  const kgRows=mesesOrden.map(mes=>{
+    const row={Mes:mes};
+    let tot=0;
+    materiales.forEach(mat=>{const v=Math.round((mesesMap.get(mes)[mat]?.kg||0)*100)/100;row[mat]=v;tot+=v;});
+    row["TOTAL kg"]=Math.round(tot*100)/100;
+    return row;
+  });
+  // Costo
+  const costoHeader=["Mes",...materiales,"TOTAL USD"];
+  const costoRows=mesesOrden.map(mes=>{
+    const row={Mes:mes};
+    let tot=0;
+    materiales.forEach(mat=>{const v=Math.round((mesesMap.get(mes)[mat]?.costo||0)*100)/100;row[mat]=v;tot+=v;});
+    row["TOTAL USD"]=Math.round(tot*100)/100;
+    return row;
+  });
+  const wsMens=XLSX.utils.book_new();
+  const wsMensSheet=XLSX.utils.aoa_to_sheet([
+    ["KG CONSUMIDOS POR MES Y MATERIAL"],[]
+    ,[...kgHeader],
+    ...kgRows.map(r=>[r.Mes,...materiales.map(m=>r[m]||0),r["TOTAL kg"]]),
+    [],
+    ["COSTO USD POR MES Y MATERIAL"],[]
+    ,[...costoHeader],
+    ...costoRows.map(r=>[r.Mes,...materiales.map(m=>r[m]||0),r["TOTAL USD"]])
+  ]);
+  wsMensSheet["!cols"]=[{wch:10},...materiales.map(()=>({wch:14})),{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsMensSheet, "Por mes");
+
   // Nombre del archivo
   const nombreMes=mesFilter?mesFilter:"todo";
   XLSX.writeFile(wb,`stock_chapas_${nombreMes}.xlsx`);
@@ -2228,6 +2295,121 @@ function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;
 
 // Verificar si ya estaba autenticado en esta sesión
 initTablaPrecios();
+// ─── ESTADÍSTICAS ──────────────────────────────────────────────────────────
+
+let _statsChart=null, _statsModo='kg';
+
+const MAT_COLORES={
+  "Inox 304":     "#0f5c4a","Inox 316":     "#1a7a64","Inox 430":     "#2da882",
+  "Galvanizada":  "#1a3f7a","Acero Carbono":"#2a2a2a","Acero Descapado":"#555",
+  "Acero Corten": "#7a3a00"
+};
+
+function setStatsModo(modo){
+  _statsModo=modo;
+  document.getElementById("stats-btn-kg").style.background=modo==="kg"?"var(--text)":"var(--surface2)";
+  document.getElementById("stats-btn-kg").style.color=modo==="kg"?"#fff":"var(--text2)";
+  document.getElementById("stats-btn-costo").style.background=modo==="costo"?"var(--text)":"var(--surface2)";
+  document.getElementById("stats-btn-costo").style.color=modo==="costo"?"#fff":"var(--text2)";
+  renderStats();
+}
+
+function renderStats(){
+  if(typeof Chart==="undefined")return;
+  const n=parseInt(document.getElementById("stats-meses").value)||6;
+
+  // Construir lista de meses (últimos N, orden cronológico)
+  const ahora=new Date();
+  const meses=[];
+  for(let i=(n===0?48:n)-1;i>=0;i--){
+    const d=new Date(ahora.getFullYear(),ahora.getMonth()-i,1);
+    const key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+    const label=d.toLocaleDateString("es-UY",{month:"short",year:"2-digit"});
+    meses.push({key,label});
+  }
+
+  // Filtrar al rango real si es "todo"
+  const mesesConDatos=new Set(historial.map(h=>{
+    const p=(h.fecha||"").split(" ")[0].split("/");
+    return p.length===3?p[2]+"-"+p[1].padStart(2,"0"):"";
+  }));
+  const mesesFiltrados=n===0?meses.filter(m=>mesesConDatos.has(m.key)):meses;
+
+  // Agrupar por mes y material
+  const materiales=[...new Set(historial.map(h=>h.mat).filter(Boolean))].sort();
+  const porMesMat={};
+  historial.filter(h=>!h.anulado).forEach(h=>{
+    const p=(h.fecha||"").split(" ")[0].split("/");
+    if(p.length!==3)return;
+    const key=p[2]+"-"+p[1].padStart(2,"0");
+    if(!mesesFiltrados.find(m=>m.key===key))return;
+    if(!porMesMat[key])porMesMat[key]={};
+    const mat=h.mat||"";
+    if(!porMesMat[key][mat])porMesMat[key][mat]={kg:0,costo:0};
+    porMesMat[key][mat].kg+=((h.kg_usados||0)*(h.qty_descontada||1));
+    porMesMat[key][mat].costo+=((h.costo_usd||0)*(h.qty_descontada||1));
+  });
+
+  const labels=mesesFiltrados.map(m=>m.label);
+  const datasets=materiales.map(mat=>({
+    label:mat,
+    data:mesesFiltrados.map(m=>Math.round(((porMesMat[m.key]?.[mat]?.[_statsModo])||0)*100)/100),
+    backgroundColor:MAT_COLORES[mat]||"#888",
+    borderRadius:3,stack:"a"
+  })).filter(d=>d.data.some(v=>v>0));
+
+  const ctx=document.getElementById("stats-chart").getContext("2d");
+  if(_statsChart)_statsChart.destroy();
+  _statsChart=new Chart(ctx,{
+    type:"bar",
+    data:{labels,datasets},
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{position:"bottom",labels:{font:{size:12},padding:16}},
+        title:{display:true,text:_statsModo==="kg"?"Kg consumidos por material":"Costo USD por material",font:{size:14,weight:"600"}}
+      },
+      scales:{
+        x:{stacked:true,grid:{display:false}},
+        y:{stacked:true,ticks:{callback:v=>_statsModo==="kg"?v+" kg":"USD "+v}}
+      }
+    }
+  });
+
+  // Tabla resumen debajo del gráfico
+  const totalesMat=materiales.map(mat=>{
+    const kg=mesesFiltrados.reduce((a,m)=>(a+(porMesMat[m.key]?.[mat]?.kg||0)),0);
+    const costo=mesesFiltrados.reduce((a,m)=>(a+(porMesMat[m.key]?.[mat]?.costo||0)),0);
+    return {mat,kg:Math.round(kg*100)/100,costo:Math.round(costo*100)/100};
+  }).filter(r=>r.kg>0||r.costo>0).sort((a,b)=>b.costo-a.costo);
+
+  const totalKg=Math.round(totalesMat.reduce((a,r)=>a+r.kg,0)*100)/100;
+  const totalCosto=Math.round(totalesMat.reduce((a,r)=>a+r.costo,0)*100)/100;
+
+  document.getElementById("stats-tabla").innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--surface2)">
+        <th style="padding:10px 14px;text-align:left;font-weight:700;border-bottom:1px solid var(--border)">Material</th>
+        <th style="padding:10px 14px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">Kg consumidos</th>
+        <th style="padding:10px 14px;text-align:right;font-weight:700;border-bottom:1px solid var(--border)">Costo USD</th>
+      </tr></thead>
+      <tbody>
+        ${totalesMat.map(r=>`<tr>
+          <td style="padding:9px 14px;border-bottom:1px solid var(--border)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${MAT_COLORES[r.mat]||"#888"};margin-right:8px;vertical-align:middle"></span>${r.mat}</td>
+          <td style="padding:9px 14px;text-align:right;border-bottom:1px solid var(--border)">${r.kg>0?r.kg+" kg":"—"}</td>
+          <td style="padding:9px 14px;text-align:right;border-bottom:1px solid var(--border);font-weight:600">${r.costo>0?"USD "+r.costo.toFixed(2):"—"}</td>
+        </tr>`).join("")}
+      </tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:700">
+        <td style="padding:10px 14px">Total</td>
+        <td style="padding:10px 14px;text-align:right">${totalKg} kg</td>
+        <td style="padding:10px 14px;text-align:right">USD ${totalCosto.toFixed(2)}</td>
+      </tr></tfoot>
+    </table>`;
+}
+
+// ─── INICIO ─────────────────────────────────────────────────────────────────
+
 if(sessionStorage.getItem("auth")==="ok"){
   document.getElementById("login-screen").style.display="none";
   document.getElementById("app").style.display="block";
