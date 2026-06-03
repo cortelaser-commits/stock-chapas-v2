@@ -174,6 +174,11 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .pago-add button:hover{background:#283593}
 .btn-pagos{background:#e8eaf6;border:1px solid #9fa8da;color:#3949ab;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
 .btn-pagos:hover{background:#c5cae9}
+/* AJUSTE DE PRECIO */
+.ajuste-panel{background:#fff8e1;border:1px solid #ffe082;border-radius:var(--radius);padding:12px 14px;margin:4px 0 8px}
+.btn-ajuste{background:#fff8e1;border:1px solid #ffe082;color:#e65100;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
+.btn-ajuste:hover{background:#ffecb3}
+.ajuste-badge{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;background:#fff9c4;color:#e65100;white-space:nowrap}
 /* PRESUPUESTO IMPRIMIBLE */
 #cot-presupuesto{display:none}
 @media print{
@@ -2694,14 +2699,17 @@ function renderCotHist(){
         const pagado=_pagosTotales(c);
         const saldo=c.total-pagado;
         const pagoBadge=pagado>0?(saldo<=0?'<span style="font-size:11px;font-weight:700;background:#c8e6c9;color:#1b5e20;padding:2px 8px;border-radius:20px;margin-left:8px">✅ Pagado</span>':`<span style="font-size:11px;font-weight:700;background:#fff9c4;color:#f57f17;padding:2px 8px;border-radius:20px;margin-left:8px">Seña ${cotFmt(pagado)} · Saldo ${cotFmt(saldo)}</span>`):'';
+        const totalReal=_cotTotal(c);
         return `<div class="prod-card">
           <div style="flex:1">
             <div style="font-size:13.5px;font-weight:700;color:var(--green-text);display:flex;align-items:center;flex-wrap:wrap;gap:4px">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}${pagoBadge}</div>
-            <div style="font-size:11.5px;color:var(--green-text);opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(c.total)}</div>
+            <div style="font-size:11.5px;color:var(--green-text);opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(totalReal)}${c.ajuste?` <span class="ajuste-badge">+ajuste</span>`:""}</div>
           </div>
+          <button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})" style="margin-right:4px">✏️ Ajuste</button>
           <button class="btn-pagos" onclick="cotTogglePagos(${c.id})" style="margin-right:6px">💳 Pagos</button>
           <button class="prod-btn-cut" onclick="cotSetEstado(${c.id},'cortada')">✂ Marcar cortada</button>
         </div>
+        <div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>
         <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
       }).join('')}
     </div>`;
@@ -2723,33 +2731,41 @@ function renderCotHist(){
     const ecfg=ESTADO_CFG[estado]||ESTADO_CFG.pendiente;
     const matInfo=c.soloCorte?"Solo corte":(c.mat+(c.esp?" · "+c.esp:""));
     const conPagos=(estado==="aceptada"||estado==="cortada");
+    const totalReal=conPagos?_cotTotal(c):c.total;
     const pagado=conPagos?_pagosTotales(c):0;
-    const saldo=c.total-pagado;
+    const saldo=totalReal-pagado;
+    const ajusteBadge=conPagos&&c.ajuste?` <span class="ajuste-badge" title="${c.ajuste.detalle}">${c.ajuste.monto>=0?"+":""}${cotFmt(c.ajuste.monto)}</span>`:"";
     const pagoSub=conPagos&&pagado>0?` · <span style="color:${saldo<=0?"#2e7d32":"#f57f17"};font-weight:700">${saldo<=0?"✅ Pagado":"Seña "+cotFmt(pagado)+" · Saldo "+cotFmt(saldo)}</span>`:"";
     return `<div style="border-bottom:1px solid var(--border)">
-      <div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto ${conPagos?"auto":""};gap:8px;align-items:center;padding:10px 0;border:none">
+      <div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto ${conPagos?"auto auto":""};gap:8px;align-items:center;padding:10px 0;border:none">
         <div>
           <div class="cot-hist-job">${c.job||"Sin nombre"}</div>
           <div class="cot-hist-sub">${f} · ${matInfo} · ${c.cant} u.${pagoSub}</div>
         </div>
-        <div class="cot-hist-tot cot-mono">${cotFmt(c.total)}</div>
+        <div class="cot-hist-tot cot-mono">${cotFmt(totalReal)}${ajusteBadge}</div>
         <select onchange="cotSetEstado(${c.id},this.value)" style="height:28px;padding:0 6px;border-radius:5px;font-size:12px;font-weight:600;border:1px solid ${ecfg.color};background:${ecfg.bg};color:${ecfg.color};cursor:pointer">
           <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
           <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
           <option value="cortada" ${estado==="cortada"?"selected":""}>✂ Cortada</option>
           <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
         </select>
+        ${conPagos?`<button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️ Ajuste</button>`:""}
         ${conPagos?`<button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>`:""}
         <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
         <button class="cot-hist-del" onclick="cotBorrarHist(${c.id})">🗑</button>
       </div>
+      ${conPagos?`<div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>`:""}
       ${conPagos?`<div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`:""}
     </div>`;
   }).join("");
   el.innerHTML=html;
 }
+// ---- Total real de una cotización (incluye ajuste si hay) ----
+function _cotTotal(c){return(c.totalConDesc||c.total||0)+(c.ajuste?.monto||0);}
+
 // ---- Pagos de cotizaciones ----
 let _pagosPanelAbiertos=new Set();
+let _ajustePanelAbiertos=new Set();
 
 function _pagosTotales(c){return(c.pagos||[]).reduce((s,p)=>s+(p.monto||0),0);}
 
@@ -2759,7 +2775,8 @@ function _formaClass(f){return f==="efectivo"?"ef":f==="mercadopago"?"mp":"";}
 function _renderPagoPanel(c){
   const pagos=c.pagos||[];
   const pagado=_pagosTotales(c);
-  const saldo=c.total-pagado;
+  const totalReal=_cotTotal(c);
+  const saldo=totalReal-pagado;
   let h="";
   if(pagos.length){
     h+=pagos.map(p=>`<div class="pago-row">
@@ -2772,7 +2789,7 @@ function _renderPagoPanel(c){
     h+=`<div style="color:var(--text3);font-size:13px;margin-bottom:8px">Sin pagos registrados.</div>`;
   }
   h+=`<div class="pago-summary">
-    <span>Total: <b>${cotFmt(c.total)}</b></span>
+    <span>Total: <b>${cotFmt(totalReal)}</b>${c.ajuste?`<span style="font-size:11px;color:#e65100;font-weight:600"> (ajustado)</span>`:""}</span>
     <span>Cobrado: <b style="color:#2e7d32">${cotFmt(pagado)}</b></span>
     <span>Saldo: <b style="color:${saldo<=0?"#2e7d32":"#c62828"}">${cotFmt(saldo)}</b></span>
   </div>`;
@@ -2784,6 +2801,60 @@ function _renderPagoPanel(c){
       <option value="mercadopago">Mercado Pago</option>
     </select>
     <button onclick="cotAgregarPago(${c.id})">+ Registrar pago</button>
+  </div>`;
+  return h;
+}
+
+// ---- Ajuste de precio ----
+function cotToggleAjuste(id){
+  if(_ajustePanelAbiertos.has(id))_ajustePanelAbiertos.delete(id);
+  else _ajustePanelAbiertos.add(id);
+  const el=document.getElementById("cot-ajuste-"+id);
+  if(el)el.style.display=_ajustePanelAbiertos.has(id)?"block":"none";
+}
+function cotGuardarAjuste(cotId){
+  const montoEl=document.getElementById("ajuste-monto-"+cotId);
+  const detalleEl=document.getElementById("ajuste-detalle-"+cotId);
+  const monto=parseFloat(montoEl.value)||0;
+  const detalle=detalleEl.value.trim();
+  if(!detalle){showToast("⚠️ Ingresá un detalle del ajuste");detalleEl.focus();return;}
+  const c=cotizaciones.find(x=>x.id===cotId);if(!c)return;
+  c.ajuste={monto,detalle,fecha:new Date().toLocaleDateString("es-UY",{day:"2-digit",month:"2-digit",year:"2-digit"})};
+  guardarEnServidor();
+  renderCotHist();
+  showToast("✅ Ajuste guardado");
+}
+function cotBorrarAjuste(cotId){
+  if(!confirm("¿Eliminar el ajuste de precio?"))return;
+  const c=cotizaciones.find(x=>x.id===cotId);if(!c)return;
+  delete c.ajuste;
+  guardarEnServidor();
+  renderCotHist();
+}
+function _renderAjustePanel(c){
+  const aj=c.ajuste;
+  const totalOriginal=c.totalConDesc||c.total||0;
+  const totalFinal=_cotTotal(c);
+  let h="";
+  if(aj){
+    h+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #ffe082;margin-bottom:10px">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#e65100">${aj.monto>=0?"+":""}${cotFmt(aj.monto)}</div>
+        <div style="font-size:12px;color:#795548;margin-top:2px">${aj.detalle}</div>
+        <div style="font-size:11px;color:#bcaaa4;margin-top:1px">${aj.fecha||""}</div>
+      </div>
+      <button onclick="cotBorrarAjuste(${c.id})" style="background:none;border:none;color:#bcaaa4;font-size:15px;cursor:pointer;padding:4px">🗑</button>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#5d4037;margin-bottom:10px">
+      Original: ${cotFmt(totalOriginal)} → Nuevo total: <span style="color:#2e7d32">${cotFmt(totalFinal)}</span>
+    </div>`;
+  } else {
+    h+=`<div style="color:#795548;font-size:13px;margin-bottom:10px">Sin ajuste de precio.</div>`;
+  }
+  h+=`<div style="display:flex;gap:8px;align-items:center">
+    <input type="number" id="ajuste-monto-${c.id}" placeholder="Monto ajuste ($)" value="${aj?.monto||""}" style="height:34px;padding:0 10px;border:1px solid #ffe082;border-radius:var(--radius);font:inherit;font-size:13px;background:#fff;width:140px">
+    <input type="text" id="ajuste-detalle-${c.id}" placeholder="Detalle (qué se agregó)" value="${aj?.detalle||""}" style="height:34px;padding:0 10px;border:1px solid #ffe082;border-radius:var(--radius);font:inherit;font-size:13px;background:#fff;flex:1" onkeydown="if(event.key==='Enter')cotGuardarAjuste(${c.id})">
+    <button onclick="cotGuardarAjuste(${c.id})" style="height:34px;padding:0 14px;background:#e65100;color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">Guardar</button>
   </div>`;
   return h;
 }
@@ -2816,8 +2887,11 @@ function cotBorrarPago(cotId,pagoId){
   renderCotHist();
 }
 
+let _cotizacionActivaId=null; // ID de la cotización guardada que está abierta en el form
+
 function cotReabrir(id){
   const c=cotizaciones.find(x=>x.id===id);if(!c)return;
+  _cotizacionActivaId=id;
   document.getElementById("cot-job").value=c.job==="Sin nombre"?"":c.job;
   document.getElementById("cot-cant").value=c.cant;
   document.getElementById("cot-dolar").value=c.dolar;
@@ -3102,6 +3176,11 @@ function cotImprimir(){
   preciosRows+=lineaCartel;
   if(r.pintOn){const t=r.pintPesos*r.cant;preciosRows+='<tr><td>Pintura<br><small>terminación del cartel</small></td><td class="r">'+cotFmt(t)+'</td></tr>';}
   if(r.oxidOn){const t=r.oxidPesos*r.cant;preciosRows+='<tr><td>Proceso de oxidación<br><small>terminación del cartel</small></td><td class="r">'+cotFmt(t)+'</td></tr>';}
+  // Si la cotización tiene ajuste, agregarlo como línea separada
+  const cotActiva=_cotizacionActivaId?cotizaciones.find(x=>x.id===_cotizacionActivaId):null;
+  if(cotActiva?.ajuste){
+    preciosRows+='<tr><td>'+cotActiva.ajuste.detalle+'<br><small>ajuste adicional</small></td><td class="r" style="color:'+(cotActiva.ajuste.monto>=0?"#2e7d32":"#c62828")+'">'+cotFmt(cotActiva.ajuste.monto)+'</td></tr>';
+  }
 
   const imgHTML=cotImg?'<div class="pdesign"><img src="'+cotImg+'" alt="Diseño"></div>':"";
 
@@ -3147,7 +3226,7 @@ function cotImprimir(){
   Promise.all(pending).then(()=>window.print());
 }
 
-function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;_pedidoActivoId=null;
+function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;_pedidoActivoId=null;_cotizacionActivaId=null;
   ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil","cot-medida-cliente"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
