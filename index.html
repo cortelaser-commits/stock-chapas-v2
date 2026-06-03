@@ -884,6 +884,7 @@ const STD = {
 
 let nextId=100, items=[], historial=[], cotizaciones=[], cotNextNum=1, filter="all", modalItemId=null, conectado=false, _histPage=0;
 const HIST_PAGE_SIZE=20;
+let _datosYaCargados=false; // guard: no guardar hasta que el servidor responda
 let _saveTimer=null, _toastTimer=null, _lastSavedHash=null, _searchTimer=null;
 const SYNC_INTERVAL_MS=30000, TOAST_MS=2500, SAVE_DEBOUNCE_MS=1500, SEARCH_DEBOUNCE_MS=300, FETCH_TIMEOUT_MS=45000;
 
@@ -912,6 +913,7 @@ async function cargarDesdeServidor(){
     const data=await r.json();
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
+    _datosYaCargados=true; // a partir de acá sí se puede guardar
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();
   }catch(e){
@@ -965,11 +967,12 @@ function guardarEnServidor(){
 }
 
 async function _doSave(){
-  _saveTimer=null; // limpiar para que el polling pueda correr después
+  _saveTimer=null;
+  if(!_datosYaCargados) return; // GUARD: nunca guardar antes de recibir datos del servidor
   const hash=_dataHash();
   if(hash===_lastSavedHash){
     setSyncStatus("ok","Guardado ✓");
-    return; // datos no cambiaron, no gastar tráfico
+    return;
   }
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Guardando...";
