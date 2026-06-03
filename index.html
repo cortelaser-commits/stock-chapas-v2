@@ -1121,7 +1121,14 @@ function _dataHash(){
   // Checksum liviano para detectar si los datos realmente cambiaron
   let h=0;
   for(const it of items) h=(h*31+it.id*17+it.qty*7+(it.precio||0)*3)>>>0;
-  h=(h*31+historial.length*13+items.length*7+(cotizaciones||[]).length*19+(cotNextNum||0)*11+(pedidos||[]).length*23)>>>0;
+  // Incluir contenido de cotizaciones: pagos y ajustes
+  let totPagos=0, totPagosMonto=0, totAjustes=0, totAjustesMonto=0;
+  for(const c of (cotizaciones||[])){
+    totPagos+=(c.pagos||[]).length;
+    totPagosMonto+=Math.round((c.pagos||[]).reduce((s,p)=>s+(p.monto||0),0));
+    if(c.ajuste){totAjustes++;totAjustesMonto+=Math.round(c.ajuste.monto||0);}
+  }
+  h=(h*31+historial.length*13+items.length*7+(cotizaciones||[]).length*19+(cotNextNum||0)*11+(pedidos||[]).length*23+totPagos*29+(totPagosMonto%9973)*31+totAjustes*37+(totAjustesMonto%9973)*41)>>>0;
   return h;
 }
 
