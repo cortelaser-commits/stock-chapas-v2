@@ -968,7 +968,7 @@ async function _apiPatch(path, body){
   try{
     const r=await fetch(API+path,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
     if(!r.ok)throw new Error();
-    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); return true;
+    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); _guardarBackupLocal(); return true;
   }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
 }
 
@@ -977,7 +977,7 @@ async function _apiPost(path, body){
   try{
     const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
     if(!r.ok)throw new Error();
-    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); return true;
+    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); _guardarBackupLocal(); return true;
   }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
 }
 
@@ -988,7 +988,7 @@ async function _apiDelete(path, body){
     if(body) opts.body=JSON.stringify(body);
     const r=await fetch(API+path,opts);
     if(!r.ok)throw new Error();
-    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); return true;
+    const d=await r.json(); _syncTs(d.ts); setSyncStatus("ok","Guardado ✓"); _guardarBackupLocal(); return true;
   }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
 }
 
@@ -1033,7 +1033,7 @@ setInterval(async()=>{
     if(meta&&meta.ts&&meta.ts>(window._lastTs||0)){
       const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
       const data=await r.json();
-      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();}
+      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();if(_vista==='grupo')renderGrupo();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();}
     }
   }catch(e){}finally{_sincronizando=false;}
 },SYNC_INTERVAL_MS);
@@ -2329,7 +2329,7 @@ function cotSetEstado(id, estado){
   const c=cotizaciones.find(x=>x.id===id);
   if(!c)return;
   c.estado=estado;
-  guardarEnServidor();
+  _apiPatch(`/stock/cotizacion/${id}`,{estado}); // endpoint liviano en vez de save completo
   renderCotHist();
 }
 

@@ -319,6 +319,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── PATCH /stock/cotizacion/:id — actualizar estado de una cotización ─────
+  if (req.method === 'PATCH' && /^\/stock\/cotizacion\/\d+$/.test(url)) {
+    if (!db) { jsonRes(res, 503, { error: 'db no lista' }); return; }
+    const cotId = parseId(url);
+    try {
+      const body = await parseBody(req); // { estado }
+      const ts = Date.now();
+      const setFields = { 'data.ts': ts };
+      if (body.estado !== undefined) setFields['data.cotizaciones.$[el].estado'] = body.estado;
+      await updateField(setFields, [{ 'el.id': cotId }]);
+      jsonRes(res, 200, { ok: true, ts });
+    } catch(e) { jsonRes(res, 400, { error: e.message }); }
+    return;
+  }
+
   // ── PATCH /stock/laser/:id — actualizar qty de un ítem laser ────────────
   if (req.method === 'PATCH' && /^\/stock\/laser\/\d+$/.test(url)) {
     if (!db) { jsonRes(res, 503, { error: 'db no lista' }); return; }
