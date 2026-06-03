@@ -8,7 +8,34 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URL = process.env.MONGO_URL || '';
 const DB_NAME = 'stockchapas';
 const COL_NAME = 'stock';
+const MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB máximo por request
 let db = null;
+
+// Capturar rechazos no manejados para que el servidor no se caiga
+process.on('unhandledRejection', (reason) => {
+  console.error('UnhandledRejection:', reason?.message || reason);
+});
+
+// Rate limiting simple: máx 120 requests/minuto por IP
+const _rateMap = new Map();
+function checkRate(ip) {
+  const now = Date.now();
+  const reqs = (_rateMap.get(ip) || []).filter(t => now - t < 60000);
+  if (reqs.length >= 120) return false;
+  reqs.push(now);
+  _rateMap.set(ip, reqs);
+  return true;
+}
+// Limpiar el mapa cada 5 minutos para no crecer indefinidamente
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, reqs] of _rateMap) {
+    if (reqs.every(t => now - t > 60000)) _rateMap.delete(ip);
+  }
+}, 300000);
+
+const LOG = process.env.DEBUG === 'true';
+const log = (...a) => LOG && console.log(...a);
 
 async function conectarDB() {
   if (!MONGO_URL) { console.log('Sin MONGO_URL'); return; }
@@ -16,15 +43,15 @@ async function conectarDB() {
     const client = new MongoClient(MONGO_URL, { serverSelectionTimeoutMS: 10000 });
     await client.connect();
     db = client.db(DB_NAME);
-    console.log('Conectado a MongoDB Atlas - DB:', DB_NAME);
+    console.log('MongoDB conectado - DB:', DB_NAME);
     const test = await db.collection(COL_NAME).findOne({ _id: 'stock' });
     if (test) {
-      console.log('Documento encontrado - Items:', test.data?.items?.length, 'Historial:', test.data?.historial?.length);
+      console.log('Items:', test.data?.items?.length, '| Historial:', test.data?.historial?.length, '| Cotizaciones:', test.data?.cotizaciones?.length);
     } else {
-      console.log('Documento NO encontrado en coleccion', COL_NAME);
+      console.log('Documento no encontrado — iniciando con STOCK_INICIAL');
     }
   } catch(e) {
-    console.log('Error conectando:', e.message);
+    console.error('Error conectando a MongoDB:', e.message);
     setTimeout(conectarDB, 5000);
   }
 }
@@ -35,8 +62,12 @@ const STOCK_INICIAL = {"items":[{"id":1,"pallet":1,"mat":"Galvanizada","esp":"0.
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
-    let b = '';
-    req.on('data', c => b += c);
+    let b = '', size = 0;
+    req.on('data', c => {
+      size += c.length;
+      if (size > MAX_BODY_SIZE) { req.destroy(); reject(new Error('Payload too large')); return; }
+      b += c;
+    });
     req.on('end', () => { try { resolve(JSON.parse(b)); } catch(e) { reject(e); } });
     req.on('error', reject);
   });
@@ -56,19 +87,15 @@ function parseId(url) {
 // ─── Base de datos ──────────────────────────────────────────────────────────
 
 async function leerStock() {
-  if (!db) { console.log('leerStock: db es null, devolviendo STOCK_INICIAL'); return STOCK_INICIAL; }
+  if (!db) { log('leerStock: db null'); return STOCK_INICIAL; }
   try {
     const doc = await db.collection(COL_NAME).findOne({ _id: 'stock' });
-    if (doc) {
-      console.log('leerStock: items:', doc.data?.items?.length, 'historial:', doc.data?.historial?.length);
-      return doc.data;
-    } else {
-      console.log('leerStock: documento NO encontrado, guardando STOCK_INICIAL');
-      await guardarStock(STOCK_INICIAL);
-      return STOCK_INICIAL;
-    }
+    if (doc) { log('leerStock ok, items:', doc.data?.items?.length); return doc.data; }
+    log('leerStock: doc no encontrado, usando STOCK_INICIAL');
+    await guardarStock(STOCK_INICIAL);
+    return STOCK_INICIAL;
   } catch(e) {
-    console.log('leerStock ERROR:', e.message);
+    console.error('leerStock ERROR:', e.message);
     return STOCK_INICIAL;
   }
 }
@@ -83,7 +110,7 @@ async function guardarStock(data) {
     );
     return true;
   } catch(e) {
-    console.log('guardarStock ERROR:', e.message);
+    console.error('guardarStock ERROR:', e.message);
     return false;
   }
 }
@@ -105,6 +132,10 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // Rate limiting
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '';
+  if (!checkRate(ip)) { res.writeHead(429, {'Content-Type':'application/json'}); res.end('{"error":"Too many requests"}'); return; }
 
   const url = req.url.split('?')[0];
 
