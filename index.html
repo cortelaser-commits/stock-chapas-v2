@@ -2460,13 +2460,15 @@ function cotImprimir(){
   }else{const ar=document.getElementById("cot-area").value;if(ar)medida=ar+" m²";}
   const numero=String(cotNextNum).padStart(4,"0");
 
-  let detalle="<li><b>Material:</b> "+r.mat+" "+r.esp+" mm</li>";
-  if(medida)detalle+="<li><b>Medida:</b> "+medida+"</li>";
+  const soloCorte=document.getElementById("cot-solo-corte").checked;
+  let detalle="";
+  if(!soloCorte)detalle+="<li><b>Material:</b> "+r.mat+" "+r.esp+" mm</li>";
+  if(medida&&!soloCorte)detalle+="<li><b>Medida:</b> "+medida+"</li>";
   detalle+="<li><b>Cantidad:</b> "+r.cant+" "+(r.cant==1?"cartel":"carteles")+"</li>";
   if(r.golpes>0)detalle+="<li><b>Plegado:</b> "+r.golpes+" "+(r.golpes==1?"golpe":"golpes")+"</li>";
 
   let preciosRows="";
-  const partesIncluye=["material","corte","diseño"];
+  const partesIncluye=soloCorte?["corte","diseño"]:["material","corte","diseño"];
   if(r.golpes>0)partesIncluye.push("plegado");
   if(r.ilum>0)partesIncluye.push("iluminación");
   if(r.envOn)partesIncluye.push("envío");
