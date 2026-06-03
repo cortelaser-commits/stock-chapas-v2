@@ -1051,6 +1051,7 @@ const STD = {
 let nextId=100, items=[], historial=[], cotizaciones=[], cotNextNum=1, filter="all", modalItemId=null, conectado=false, _histPage=0;
 const HIST_PAGE_SIZE=20;
 let _datosYaCargados=false; // guard: no guardar hasta que el servidor responda
+let _cotizacionesCargadas=0; // mínimo de cotizaciones que sabemos que existen
 let _saveTimer=null, _toastTimer=null, _lastSavedHash=null, _searchTimer=null;
 const SYNC_INTERVAL_MS=30000, TOAST_MS=2500, SAVE_DEBOUNCE_MS=1500, SEARCH_DEBOUNCE_MS=300, FETCH_TIMEOUT_MS=45000;
 
@@ -1080,6 +1081,7 @@ async function cargarDesdeServidor(){
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
     _datosYaCargados=true;
+    _cotizacionesCargadas=cotizaciones.length; // registrar cuántas hay
     _guardarBackupLocal();
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();
@@ -1170,7 +1172,13 @@ function guardarEnServidor(){
 
 async function _doSave(){
   _saveTimer=null;
-  if(!_datosYaCargados) return; // GUARD: nunca guardar antes de recibir datos del servidor
+  if(!_datosYaCargados) return; // GUARD 1: nunca guardar antes de recibir datos del servidor
+  // GUARD 2: nunca guardar si las cotizaciones bajaron misteriosamente
+  if(_cotizacionesCargadas>0 && cotizaciones.length < _cotizacionesCargadas){
+    console.error('GUARD bloqueó save: cotizaciones pasarían de',_cotizacionesCargadas,'a',cotizaciones.length);
+    setSyncStatus("error","⚠️ Error interno — recargá la página");
+    return;
+  }
   const hash=_dataHash();
   if(hash===_lastSavedHash){
     setSyncStatus("ok","Guardado ✓");
