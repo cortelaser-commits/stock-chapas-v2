@@ -2039,7 +2039,6 @@ function cotFmtUSD(n){return "US$"+n.toLocaleString("es-UY",{minimumFractionDigi
 
 function renderCotizador(){
   if(!cotReady){
-    addCotOp("Colocación",0,true);
     renderCotEnv();
     cotPrefillPrecio();
     // Precarga el logo para que esté listo al imprimir
