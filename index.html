@@ -147,7 +147,7 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .cot-hist-del:hover{color:#b22020}
 
 /* PEDIDOS PARA COTIZAR */
-.ped-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.ped-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f0b6b6}
 .ped-row:last-child{border:none}
 .ped-btn-load{background:var(--text);color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;white-space:nowrap}
 .ped-btn-load:hover{opacity:.82}
@@ -801,6 +801,29 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
 
   <!-- TAB COTIZADOR -->
   <div id="tab-cotizador" class="tab-content">
+    <!-- PEDIDOS PARA COTIZAR — arriba del todo -->
+    <div id="ped-card" style="background:var(--red-bg);border:2px solid #e04040;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid #f0b6b6;background:#fad4d4">
+        <span style="font-size:16px">🔴</span>
+        <span style="font-size:14px;font-weight:800;color:var(--red-text);letter-spacing:.01em">Pedidos para cotizar</span>
+        <span id="ped-count" style="margin-left:auto;font-size:12px;font-weight:700;color:var(--red-text);background:#f0b6b6;padding:2px 10px;border-radius:20px"></span>
+      </div>
+      <div style="padding:14px 18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:10px">
+          <input type="text" id="ped-nombre" placeholder="Trabajo / cliente" onkeydown="if(event.key==='Enter')agregarPedido()" style="border-color:#e04040">
+          <input type="text" id="ped-mat" placeholder="Material y espesor" onkeydown="if(event.key==='Enter')agregarPedido()" style="border-color:#e04040">
+          <input type="text" id="ped-medida" placeholder="Medida / descripción" onkeydown="if(event.key==='Enter')agregarPedido()" style="border-color:#e04040">
+          <button onclick="agregarPedido()" style="height:38px;padding:0 14px;background:#c62828;color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:700;cursor:pointer">+ Agregar</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <label for="ped-img-input" style="display:flex;align-items:center;gap:7px;padding:7px 13px;background:#fff;border:1px dashed #e04040;border-radius:var(--radius);font-size:13px;font-weight:600;color:var(--red-text);cursor:pointer">📎 Imagen (opcional)</label>
+          <input type="file" id="ped-img-input" accept="image/*" style="display:none" onchange="pedSetImg(this)">
+          <img id="ped-img-prev" style="display:none;max-width:72px;max-height:72px;border:1px solid #e04040;border-radius:6px;background:#fff;padding:3px">
+          <button type="button" id="ped-img-del" onclick="pedDelImg()" style="display:none;background:none;border:none;color:var(--red-text);font-size:20px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div id="ped-list"><div style="color:var(--red-text);opacity:.6;font-size:13px">No hay pedidos pendientes.</div></div>
+      </div>
+    </div>
     <div class="cot-grid">
       <div>
         <!-- 1 TRABAJO -->
@@ -994,25 +1017,6 @@ Mercado Pago: hasta 12 cuotas sin interés.</textarea>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-    <!-- PEDIDOS PARA COTIZAR -->
-    <div class="cot-card" style="margin-top:6px">
-      <div class="cot-card-h">📝 Pedidos para cotizar <span id="ped-count" style="margin-left:auto;font-weight:500;color:var(--text3)"></span></div>
-      <div class="cot-b">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:10px">
-          <input type="text" id="ped-nombre" placeholder="Trabajo / cliente" onkeydown="if(event.key==='Enter')agregarPedido()">
-          <input type="text" id="ped-mat" placeholder="Material y espesor" onkeydown="if(event.key==='Enter')agregarPedido()">
-          <input type="text" id="ped-medida" placeholder="Medida / descripción" onkeydown="if(event.key==='Enter')agregarPedido()">
-          <button onclick="agregarPedido()" style="height:38px;padding:0 14px;background:var(--text);color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer">+ Agregar</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-          <label for="ped-img-input" style="display:flex;align-items:center;gap:7px;padding:7px 13px;background:var(--surface2);border:1px dashed var(--border2);border-radius:var(--radius);font-size:13px;font-weight:600;color:var(--text2);cursor:pointer">📎 Imagen (opcional)</label>
-          <input type="file" id="ped-img-input" accept="image/*" style="display:none" onchange="pedSetImg(this)">
-          <img id="ped-img-prev" style="display:none;max-width:72px;max-height:72px;border:1px solid var(--border);border-radius:6px;background:#fff;padding:3px">
-          <button type="button" id="ped-img-del" onclick="pedDelImg()" style="display:none;background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1">×</button>
-        </div>
-        <div id="ped-list"><div style="color:var(--text3);font-size:13px">No hay pedidos pendientes.</div></div>
       </div>
     </div>
     <!-- HISTORIAL DE COTIZACIONES -->
