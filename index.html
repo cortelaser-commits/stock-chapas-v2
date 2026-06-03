@@ -681,16 +681,26 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
         </div>
         <!-- 2 MATERIAL -->
         <div class="cot-card">
-          <div class="cot-card-h"><span class="n">2</span>Material</div>
+          <div class="cot-card-h" style="justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:8px"><span class="n">2</span>Material</div>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer">
+              <input type="checkbox" id="cot-solo-corte" onchange="cotToggleMaterial()" style="width:15px;height:15px">
+              Solo corte (sin material)
+            </label>
+          </div>
           <div class="cot-b">
+          <div id="cot-mat-fields">
             <div class="cot-row2">
               <div class="cot-f"><label>Material</label>
-                <select id="cot-mat" onchange="cotPrefillPrecio();cotStock();cotCalc()">
+                <select id="cot-mat" onchange="cotPoblarEspesores();cotPrefillPrecio();cotStock();cotCalc()">
                   <option>Acero Carbono</option><option>Acero Descapado</option><option>Galvanizada</option>
                   <option selected>Acero Corten</option><option>Inox 304</option><option>Inox 316</option><option>Inox 430</option>
                 </select>
               </div>
-              <div class="cot-f"><label>Espesor (mm)</label><input type="number" class="cot-mono" id="cot-esp" value="2" step="0.1" min="0" oninput="cotPrefillPrecio();cotStock();cotCalc()"></div>
+              <div class="cot-f"><label>Espesor</label>
+                <select id="cot-esp-sel" onchange="cotEspDesdeSelect();cotPrefillPrecio();cotStock();cotCalc()" style="width:100%;height:38px;padding:0 11px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface2);color:var(--text);font-family:inherit"></select>
+                <input type="number" class="cot-mono" id="cot-esp" value="2" step="0.1" min="0" style="display:none" oninput="cotPrefillPrecio();cotStock();cotCalc()">
+              </div>
             </div>
             <div class="cot-row2">
               <div class="cot-f"><label>Precio material (US$/kg)</label><input type="number" class="cot-mono" id="cot-precio" step="0.01" oninput="cotCalc()">
@@ -708,6 +718,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
               </div>
             </div>
             <div class="cot-stock"><span id="cot-stock-info" class="warn">—</span></div>
+          </div><!-- fin cot-mat-fields -->
           </div>
         </div>
         <!-- 3 CORTE -->
@@ -892,7 +903,7 @@ async function cargarDesdeServidor(){
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
     setSyncStatus("ok","Sincronizado ✓");
-    inicializarPrecios();render();renderHistorial();poblarSelectorMes();if(typeof renderCotHist==="function")renderCotHist();
+    inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();
   }catch(e){
     setSyncStatus("error","⚠️ Sin conexión al servidor");
     setTimeout(cargarDesdeServidor,8000);
@@ -2066,10 +2077,11 @@ function cotDelImg(){cotImg=null;
 // ---- Historial de cotizaciones ----
 function cotSnapshot(){
   const r=cotCompute();
+  const soloCorte=document.getElementById("cot-solo-corte").checked;
   return {
     id:Date.now(), ts:Date.now(), num:cotNextNum,
     job:document.getElementById("cot-job").value||"Sin nombre",
-    cant:r.cant, dolar:r.dolar, mat:r.mat, esp:document.getElementById("cot-esp").value,
+    cant:r.cant, dolar:r.dolar, mat:r.mat, esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,
     precio:document.getElementById("cot-precio").value,
     areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value,
     modo:cotModo, mm:document.getElementById("cot-mm").value, min:document.getElementById("cot-min").value,
@@ -2079,11 +2091,29 @@ function cotSnapshot(){
     ilum:document.getElementById("cot-ilum").value, sold:document.getElementById("cot-sold").value, cil:document.getElementById("cot-cil").value,
     ops:cotOps.filter(o=>o).map(o=>({nombre:o.nombre,monto:o.monto,porUnidad:o.porUnidad})),
     plazo:document.getElementById("cot-plazo").value, pago:document.getElementById("cot-pago").value, validez:document.getElementById("cot-validez").value,
-    imagen:cotImg,
-    total:r.total, totalUSD:r.totalUSD
+    imagen:cotImg, soloCorte,
+    total:r.total, totalUSD:r.totalUSD,
+    estado:"pendiente"
   };
 }
+
+function cotValidar(){
+  const job=document.getElementById("cot-job").value.trim();
+  if(!job){showToast("⚠️ Ingresá el nombre del trabajo");document.getElementById("cot-job").focus();return false;}
+  const soloCorte=document.getElementById("cot-solo-corte").checked;
+  if(!soloCorte){
+    const area=cotGetArea();
+    if(!area){showToast("⚠️ Ingresá las medidas del cartel");return false;}
+  }
+  const mm=parseFloat(document.getElementById("cot-mm").value)||0;
+  const min=parseFloat(document.getElementById("cot-min").value)||0;
+  if(cotModo==="recorrido"&&!mm){showToast("⚠️ Ingresá el recorrido de corte");document.getElementById("cot-mm").focus();return false;}
+  if(cotModo==="tiempo"&&!min){showToast("⚠️ Ingresá el tiempo de corte");document.getElementById("cot-min").focus();return false;}
+  return true;
+}
+
 function cotGuardar(silencioso){
+  if(!silencioso&&!cotValidar())return;
   if(typeof cotizaciones==="undefined")window.cotizaciones=[];
   cotizaciones.unshift(cotSnapshot());
   cotNextNum=(cotNextNum||1)+1;
@@ -2096,17 +2126,62 @@ function renderCotHist(){
   const cnt=document.getElementById("cot-hist-count");
   const arr=(typeof cotizaciones!=="undefined"&&Array.isArray(cotizaciones))?cotizaciones:[];
   if(cnt)cnt.textContent=arr.length?arr.length+(arr.length==1?" guardada":" guardadas"):"";
-  if(!arr.length){el.innerHTML='<div style="color:var(--text3);font-size:13px">Todavía no guardaste ninguna cotización.</div>';return;}
-  el.innerHTML=arr.map(c=>{
+
+  // Panel de ventas
+  const aceptadas=arr.filter(c=>c.estado==="aceptada");
+  const pendientes=arr.filter(c=>!c.estado||c.estado==="pendiente");
+  const rechazadas=arr.filter(c=>c.estado==="rechazada");
+  const totalVentas=aceptadas.reduce((s,c)=>s+c.total,0);
+  const totalUSDVentas=aceptadas.reduce((s,c)=>s+(c.totalUSD||0),0);
+  const totalPendiente=pendientes.reduce((s,c)=>s+c.total,0);
+
+  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+    <div style="background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:12px 14px">
+      <div style="font-size:11px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">Aceptadas</div>
+      <div style="font-size:20px;font-weight:800;color:var(--green-text);margin-top:4px">${aceptadas.length}</div>
+      <div style="font-size:12px;color:var(--green-text);margin-top:2px">${cotFmt(totalVentas)}</div>
+      <div style="font-size:11px;color:var(--green-text);opacity:.8">${cotFmtUSD(totalUSDVentas)}</div>
+    </div>
+    <div style="background:var(--amber-bg);border:1px solid #f0d89a;border-radius:var(--radius);padding:12px 14px">
+      <div style="font-size:11px;font-weight:700;color:var(--amber-text);text-transform:uppercase;letter-spacing:.05em">Pendientes</div>
+      <div style="font-size:20px;font-weight:800;color:var(--amber-text);margin-top:4px">${pendientes.length}</div>
+      <div style="font-size:12px;color:var(--amber-text);margin-top:2px">${cotFmt(totalPendiente)}</div>
+    </div>
+    <div style="background:var(--red-bg);border:1px solid #f0b6b6;border-radius:var(--radius);padding:12px 14px">
+      <div style="font-size:11px;font-weight:700;color:var(--red-text);text-transform:uppercase;letter-spacing:.05em">Rechazadas</div>
+      <div style="font-size:20px;font-weight:800;color:var(--red-text);margin-top:4px">${rechazadas.length}</div>
+    </div>
+  </div>`;
+
+  if(!arr.length){el.innerHTML=html+'<div style="color:var(--text3);font-size:13px">Todavía no guardaste ninguna cotización.</div>';return;}
+
+  const ESTADO_CFG={
+    aceptada:{label:"✓ Aceptada",bg:"var(--green-bg)",color:"var(--green-text)"},
+    rechazada:{label:"✗ Rechazada",bg:"var(--red-bg)",color:"var(--red-text)"},
+    pendiente:{label:"⏳ Pendiente",bg:"var(--amber-bg)",color:"var(--amber-text)"}
+  };
+
+  html+=arr.map(c=>{
     const f=new Date(c.ts).toLocaleDateString("es-UY",{day:"2-digit",month:"2-digit",year:"2-digit"});
-    return '<div class="cot-hist-row">'
-      +'<div><div class="cot-hist-job">'+(c.job||"Sin nombre")+'</div>'
-      +'<div class="cot-hist-sub">'+f+' · '+c.mat+' '+c.esp+'mm · '+c.cant+' u.</div></div>'
-      +'<div class="cot-hist-tot cot-mono">'+cotFmt(c.total)+'</div>'
-      +'<button class="cot-hist-btn" onclick="cotReabrir('+c.id+')">Abrir</button>'
-      +'<button class="cot-hist-del" onclick="cotBorrarHist('+c.id+')">🗑</button>'
-      +'</div>';
+    const estado=c.estado||"pendiente";
+    const ecfg=ESTADO_CFG[estado]||ESTADO_CFG.pendiente;
+    const matInfo=c.soloCorte?"Solo corte":(c.mat+(c.esp?" · "+c.esp:""));
+    return `<div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="cot-hist-job">${c.job||"Sin nombre"}</div>
+        <div class="cot-hist-sub">${f} · ${matInfo} · ${c.cant} u.</div>
+      </div>
+      <div class="cot-hist-tot cot-mono">${cotFmt(c.total)}</div>
+      <select onchange="cotSetEstado(${c.id},this.value)" style="height:28px;padding:0 6px;border-radius:5px;font-size:12px;font-weight:600;border:1px solid ${ecfg.color};background:${ecfg.bg};color:${ecfg.color};cursor:pointer">
+        <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
+        <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
+        <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
+      </select>
+      <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
+      <button class="cot-hist-del" onclick="cotBorrarHist(${c.id})">🗑</button>
+    </div>`;
   }).join("");
+  el.innerHTML=html;
 }
 function cotReabrir(id){
   const c=cotizaciones.find(x=>x.id===id);if(!c)return;
@@ -2114,7 +2189,11 @@ function cotReabrir(id){
   document.getElementById("cot-cant").value=c.cant;
   document.getElementById("cot-dolar").value=c.dolar;
   document.getElementById("cot-mat").value=c.mat;
-  document.getElementById("cot-esp").value=c.esp;
+  cotPoblarEspesores();
+  document.getElementById("cot-esp-sel").value=c.esp;
+  cotEspDesdeSelect();
+  document.getElementById("cot-solo-corte").checked=!!c.soloCorte;
+  cotToggleMaterial();
   document.getElementById("cot-precio").value=c.precio;
   cotSetArea(c.areaMode||"medida");
   document.getElementById("cot-ancho").value=c.ancho||"";
@@ -2155,6 +2234,49 @@ function cotPrefillPrecio(){
   const esp=document.getElementById("cot-esp").value;
   const p=(typeof getPrecioDefault==="function")?getPrecioDefault(mat,esp):0;
   document.getElementById("cot-precio").value=p||"";
+}
+
+// ── Dropdown de espesores según material en stock ────────────────────────────
+function cotPoblarEspesores(){
+  const mat=document.getElementById("cot-mat").value;
+  const sel=document.getElementById("cot-esp-sel");
+  const prev=sel.value;
+  // Espesores únicos de ese material en stock, ordenados numéricamente
+  const enStock=[...new Set((items||[]).filter(it=>it.mat===mat&&it.qty>0).map(it=>it.esp))]
+    .sort((a,b)=>(espesorMm(a)||0)-(espesorMm(b)||0));
+  // Espesores estándar del catálogo como fallback
+  const estandar=(STD[mat]?.esp)||[];
+  const todos=[...new Set([...enStock,...estandar])].sort((a,b)=>(espesorMm(a)||0)-(espesorMm(b)||0));
+  sel.innerHTML=todos.map(e=>{
+    const hay=enStock.includes(e);
+    return `<option value="${e}" ${hay?"":"style='color:var(--text3)'"}>${e}${hay?" ✓":""}</option>`;
+  }).join("");
+  // Mantener selección anterior si sigue existiendo
+  if(todos.includes(prev)) sel.value=prev;
+  cotEspDesdeSelect();
+}
+
+function cotEspDesdeSelect(){
+  const sel=document.getElementById("cot-esp-sel");
+  const val=sel.value;
+  // Pasar el valor numérico al input oculto que usa cotCompute
+  document.getElementById("cot-esp").value=espesorMm(val)||val.replace(/[^0-9.]/g,"");
+}
+
+// ── Toggle "solo corte" — ocultar/mostrar campos de material ────────────────
+function cotToggleMaterial(){
+  const solo=document.getElementById("cot-solo-corte").checked;
+  document.getElementById("cot-mat-fields").style.display=solo?"none":"block";
+  cotCalc();
+}
+
+// ── Cambiar estado de una cotización ─────────────────────────────────────────
+function cotSetEstado(id, estado){
+  const c=cotizaciones.find(x=>x.id===id);
+  if(!c)return;
+  c.estado=estado;
+  guardarEnServidor();
+  renderCotHist();
 }
 
 function cotSetArea(m){cotAreaMode=m;
@@ -2220,8 +2342,9 @@ function cotCompute(){
   const pOxid=parseFloat(document.getElementById("cot-t-oxid").value)||0;
   const minTerm=parseFloat(document.getElementById("cot-t-minterm").value)||0;
 
-  const kg=area*(esp/1000)*dens;
-  const matUSD=kg*precioKg*markup;
+  const soloCorte=document.getElementById("cot-solo-corte").checked;
+  const kg=soloCorte?0:area*(esp/1000)*dens;
+  const matUSD=soloCorte?0:kg*precioKg*markup;
   const matPesos=matUSD*dolar;
 
   let corteUSD=0,corteDesc="";
@@ -2290,6 +2413,7 @@ function cotCalc(){
 }
 
 function cotImprimir(){
+  if(!cotValidar())return;
   const r=cotCompute();
   const job=document.getElementById("cot-job").value||"Sin nombre";
   const fecha=new Date().toLocaleDateString("es-UY",{day:"2-digit",month:"long",year:"numeric"});
