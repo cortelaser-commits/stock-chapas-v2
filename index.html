@@ -1804,9 +1804,17 @@ function confirmarEditar(){
   if(it.tipo!==tipo){it.tipo=tipo;cambios.tipo=tipo;delete it._txt;}
   if(it.pallet!==pallet){it.pallet=pallet;cambios.pallet=pallet;}
   if(it.qty!==qty){it.qty=qty;cambios.qty=qty;}
+  // Actualizar precio automáticamente si cambió el material o espesor
+  if(cambios.mat!==undefined||cambios.esp!==undefined){
+    const nuevoPrecio=getPrecioDefault(mat,esp);
+    if(nuevoPrecio&&it.precio!==nuevoPrecio){it.precio=nuevoPrecio;cambios.precio=nuevoPrecio;}
+  }
   cerrarModalEditar();
   render();
   if(Object.keys(cambios).length){
+    // Usar guardado completo como fuente principal (más confiable en mobile)
+    // + patch quirúrgico para actualizar el servidor rápido
+    guardarEnServidor();
     _apiPatch(`/stock/item/${_editarId}`,cambios);
     showToast("✅ Chapa actualizada");
   }
