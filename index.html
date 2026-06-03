@@ -1266,15 +1266,15 @@ async function _apiDelete(path, body){
   }catch(e){ setSyncStatus("error","⚠️ No se pudo guardar"); return false; }
 }
 
-// ─── Guardado completo — solo para laser, cotizaciones y anulaciones ─────────
+// ─── Guardado completo ────────────────────────────────────────────────────────
 
-// Guarda con debounce: múltiples cambios rápidos se colapsan en 1 solo POST
-function guardarEnServidor(){
-  // Feedback visual inmediato sin esperar el debounce
+// guardarEnServidor()        → debounce normal (1500ms) para cambios frecuentes
+// guardarEnServidor(true)    → inmediato (100ms) para modales y ediciones críticas
+function guardarEnServidor(inmediato){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Pendiente...";
   clearTimeout(_saveTimer);
-  _saveTimer=setTimeout(_doSave, SAVE_DEBOUNCE_MS);
+  _saveTimer=setTimeout(_doSave, inmediato?100:SAVE_DEBOUNCE_MS);
 }
 
 async function _doSave(){
@@ -1434,8 +1434,8 @@ function render(){
   cont.innerHTML=html;updateStats();
 }
 
-function changeQty(id,d){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,it.qty+d);render();_apiPatch(`/stock/item/${id}`,{qty:it.qty});}}
-function updateQty(id,v){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,parseInt(v)||0);render();_apiPatch(`/stock/item/${id}`,{qty:it.qty});}}
+function changeQty(id,d){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,it.qty+d);render();_apiPatch(`/stock/item/${id}`,{qty:it.qty});guardarEnServidor();}}
+function updateQty(id,v){const it=items.find(x=>x.id===id);if(it){it.qty=Math.max(0,parseInt(v)||0);render();_apiPatch(`/stock/item/${id}`,{qty:it.qty});guardarEnServidor();}}
 // Precios USD/kg por defecto según material y espesor
 
 
@@ -1448,7 +1448,7 @@ const DENSIDAD = {
 
 function updatePrecio(id, val) {
   const it = items.find(x => x.id === id);
-  if (it) { it.precio = parseFloat(val) || 0; _apiPatch(`/stock/item/${id}`,{precio:it.precio}); }
+  if (it) { it.precio = parseFloat(val) || 0; _apiPatch(`/stock/item/${id}`,{precio:it.precio}); guardarEnServidor(); }
 }
 
 function espesorMm(esp){
@@ -1820,9 +1820,8 @@ function confirmarEditar(){
   cerrarModalEditar();
   render();
   if(Object.keys(cambios).length){
-    _lastSavedHash=null; // forzar que _doSave no saltee el guardado
-    guardarEnServidor();  // guardado completo (confiable en mobile)
-    _apiPatch(`/stock/item/${_editarId}`,cambios); // patch rápido
+    _lastSavedHash=null;       // forzar guardado sin importar el hash
+    guardarEnServidor(true);   // guardado completo inmediato (100ms)
     showToast("✅ Chapa actualizada");
   }
 }
