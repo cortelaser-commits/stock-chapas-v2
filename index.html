@@ -1120,7 +1120,12 @@ const SYNC_INTERVAL_MS=30000, TOAST_MS=2500, SAVE_DEBOUNCE_MS=1500, SEARCH_DEBOU
 function _dataHash(){
   // Checksum liviano para detectar si los datos realmente cambiaron
   let h=0;
-  for(const it of items) h=(h*31+it.id*17+it.qty*7+(it.precio||0)*3)>>>0;
+  for(const it of items){
+    // Incluir todas las propiedades editables para detectar cualquier cambio
+    const matH=(it.mat||"").split("").reduce((a,c)=>a*31+c.charCodeAt(0),0)>>>0;
+    const espH=(it.esp||"").split("").reduce((a,c)=>a*31+c.charCodeAt(0),0)>>>0;
+    h=(h*31+it.id*17+it.qty*7+(it.precio||0)*3+(it.pallet||0)*5+matH%997+espH%997)>>>0;
+  }
   // Incluir contenido de cotizaciones: pagos y ajustes
   let totPagos=0, totPagosMonto=0, totAjustes=0, totAjustesMonto=0;
   for(const c of (cotizaciones||[])){
@@ -1812,10 +1817,9 @@ function confirmarEditar(){
   cerrarModalEditar();
   render();
   if(Object.keys(cambios).length){
-    // Usar guardado completo como fuente principal (más confiable en mobile)
-    // + patch quirúrgico para actualizar el servidor rápido
-    guardarEnServidor();
-    _apiPatch(`/stock/item/${_editarId}`,cambios);
+    _lastSavedHash=null; // forzar que _doSave no saltee el guardado
+    guardarEnServidor();  // guardado completo (confiable en mobile)
+    _apiPatch(`/stock/item/${_editarId}`,cambios); // patch rápido
     showToast("✅ Chapa actualizada");
   }
 }
