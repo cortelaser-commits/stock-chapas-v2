@@ -1000,11 +1000,17 @@ Mercado Pago: hasta 12 cuotas sin interés.</textarea>
     <div class="cot-card" style="margin-top:6px">
       <div class="cot-card-h">📝 Pedidos para cotizar <span id="ped-count" style="margin-left:auto;font-weight:500;color:var(--text3)"></span></div>
       <div class="cot-b">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:10px">
           <input type="text" id="ped-nombre" placeholder="Trabajo / cliente" onkeydown="if(event.key==='Enter')agregarPedido()">
           <input type="text" id="ped-mat" placeholder="Material y espesor" onkeydown="if(event.key==='Enter')agregarPedido()">
           <input type="text" id="ped-medida" placeholder="Medida / descripción" onkeydown="if(event.key==='Enter')agregarPedido()">
           <button onclick="agregarPedido()" style="height:38px;padding:0 14px;background:var(--text);color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer">+ Agregar</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <label for="ped-img-input" style="display:flex;align-items:center;gap:7px;padding:7px 13px;background:var(--surface2);border:1px dashed var(--border2);border-radius:var(--radius);font-size:13px;font-weight:600;color:var(--text2);cursor:pointer">📎 Imagen (opcional)</label>
+          <input type="file" id="ped-img-input" accept="image/*" style="display:none" onchange="pedSetImg(this)">
+          <img id="ped-img-prev" style="display:none;max-width:72px;max-height:72px;border:1px solid var(--border);border-radius:6px;background:#fff;padding:3px">
+          <button type="button" id="ped-img-del" onclick="pedDelImg()" style="display:none;background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1">×</button>
         </div>
         <div id="ped-list"><div style="color:var(--text3);font-size:13px">No hay pedidos pendientes.</div></div>
       </div>
@@ -2501,6 +2507,34 @@ function cotValidar(){
 }
 
 // ---- Pedidos para cotizar ----
+let _pedImg=null; // imagen temporal mientras se llena el formulario
+
+function pedSetImg(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const MAX=800;
+      let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const cv=document.createElement("canvas");cv.width=w;cv.height=h;
+      cv.getContext("2d").drawImage(img,0,0,w,h);
+      _pedImg=cv.toDataURL("image/jpeg",0.75);
+      const p=document.getElementById("ped-img-prev");p.src=_pedImg;p.style.display="block";
+      document.getElementById("ped-img-del").style.display="inline";
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(f);
+}
+function pedDelImg(){
+  _pedImg=null;
+  const p=document.getElementById("ped-img-prev");p.src="";p.style.display="none";
+  document.getElementById("ped-img-del").style.display="none";
+  document.getElementById("ped-img-input").value="";
+}
+
 function renderPedidos(){
   const el=document.getElementById("ped-list");
   const cnt=document.getElementById("ped-count");
@@ -2510,7 +2544,8 @@ function renderPedidos(){
   if(!arr.length){el.innerHTML='<div style="color:var(--text3);font-size:13px">No hay pedidos pendientes.</div>';return;}
   el.innerHTML=arr.map(p=>`
     <div class="ped-row">
-      <div style="flex:1">
+      ${p.imagen?`<img src="${p.imagen}" style="width:52px;height:52px;object-fit:cover;border:1px solid var(--border);border-radius:6px;background:#fff;flex-shrink:0">`:``}
+      <div style="flex:1;min-width:0">
         <div class="cot-hist-job">${p.nombre}</div>
         <div class="cot-hist-sub">${[p.mat,p.medida].filter(Boolean).join(' · ')}</div>
       </div>
@@ -2523,10 +2558,11 @@ function agregarPedido(){
   if(!nombre){showToast("⚠️ Ingresá el nombre del trabajo");document.getElementById("ped-nombre").focus();return;}
   const mat=document.getElementById("ped-mat").value.trim();
   const medida=document.getElementById("ped-medida").value.trim();
-  pedidos.unshift({id:Date.now(),nombre,mat,medida});
+  pedidos.unshift({id:Date.now(),nombre,mat,medida,imagen:_pedImg||null});
   document.getElementById("ped-nombre").value="";
   document.getElementById("ped-mat").value="";
   document.getElementById("ped-medida").value="";
+  pedDelImg();
   renderPedidos();
   guardarEnServidor();
   showToast("✅ Pedido agregado");
@@ -2546,6 +2582,12 @@ function cargarPedidoEnCot(id){
     for(let i=0;i<matSel.options.length;i++){
       if(matSel.options[i].value.toLowerCase().includes(term)){matSel.selectedIndex=i;cotPoblarEspesores();cotPrefillPrecio();cotStock();break;}
     }
+  }
+  // Cargar imagen si el pedido tiene una
+  if(p.imagen){
+    cotImg=p.imagen;
+    const prev=document.getElementById("cot-img-prev");prev.src=cotImg;prev.style.display="block";
+    document.getElementById("cot-img-del").style.display="inline";
   }
   cotCalc();
   switchTab('cotizador',document.querySelector('.tab[onclick*="cotizador"]'));
