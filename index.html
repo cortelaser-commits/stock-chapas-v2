@@ -775,6 +775,11 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
           <div id="recorte-aviso" style="display:none;background:#e6f4e6;border:1px solid #4caf50;border-radius:6px;padding:10px;font-size:13px;color:#1e5c1e">
             ✂️ <strong>Se va a generar un recorte automático</strong> con el sobrante
             <div style="margin-top:6px;font-size:12px" id="recorte-detalle"></div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:12px;font-weight:600">Medida del recorte:</span>
+              <input type="text" id="recorte-medida-manual" placeholder="ej: 900x3000" style="height:28px;padding:0 8px;border:1px solid #4caf50;border-radius:4px;font:inherit;font-size:12px;width:130px;background:#fff;color:#1a1917" oninput="actualizarRecorteManual(this.value)">
+              <span style="font-size:11px;color:#1e5c1e;opacity:.8">Editá si la medida calculada no es correcta</span>
+            </div>
           </div>
           <div id="recorte-descarte" style="display:none;background:#fef3db;border:1px solid #EF9F27;border-radius:6px;padding:10px;font-size:13px;color:#633806">
             ⚠️ El sobrante es menor al 10% — se descarta, no se guarda como recorte.
@@ -1567,16 +1572,35 @@ function calcularRecorte(){
   const descarte=document.getElementById("recorte-descarte");
   if(sobrePct>=10){
     let recW,recH;
-    if(orig.w>ancho&&orig.h>largo){recW=orig.w;recH=orig.h-largo;}
-    else if(orig.w>ancho){recW=orig.w-ancho;recH=orig.h;}
-    else{recW=orig.w;recH=orig.h-largo;}
+    if(orig.w<=ancho){
+      // el corte cubre el ancho completo → recorte es lo que sobra en largo
+      recW=orig.w; recH=orig.h-largo;
+    } else if(orig.h<=largo){
+      // el corte cubre el largo completo → recorte es lo que sobra en ancho
+      recW=orig.w-ancho; recH=orig.h;
+    } else {
+      // el corte es más chico en AMBAS dimensiones → elegir el recorte de mayor área
+      const sobraAncho=(orig.w-ancho)*orig.h;   // franja lateral
+      const sobraLargo=orig.w*(orig.h-largo);   // franja frontal
+      if(sobraAncho>=sobraLargo){recW=orig.w-ancho;recH=orig.h;}
+      else{recW=orig.w;recH=orig.h-largo;}
+    }
     recW=Math.round(recW);recH=Math.round(recH);
     document.getElementById("recorte-detalle").textContent=recW+"×"+recH+" mm · "+sobrePct+"% del área original";
+    document.getElementById("recorte-medida-manual").value=recW+"x"+recH;
     window._recorteGenerado={w:recW,h:recH,pct:sobrePct};
     aviso.style.display="block";descarte.style.display="none";
   } else {
     window._recorteGenerado=null;
     aviso.style.display="none";descarte.style.display="block";
+  }
+}
+
+function actualizarRecorteManual(val){
+  const p=parseMed(val);
+  if(p&&p.w>0&&p.h>0){
+    window._recorteGenerado={w:Math.round(p.w),h:Math.round(p.h),pct:window._recorteGenerado?.pct||0};
+    document.getElementById("recorte-detalle").textContent=Math.round(p.w)+"×"+Math.round(p.h)+" mm (editado manualmente)";
   }
 }
 
@@ -1601,6 +1625,7 @@ function abrirModalConsumo(id){
   document.getElementById("campos-corte").style.display="none";
   document.getElementById("calc-result").style.display="none";
   document.getElementById("recorte-aviso").style.display="none";
+  document.getElementById("recorte-medida-manual").value="";
   document.getElementById("recorte-descarte").style.display="none";
   document.getElementById("uso-total").checked=false;
   document.getElementById("uso-parcial").checked=false;
