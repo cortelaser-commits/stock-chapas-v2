@@ -761,7 +761,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
             <div class="cot-f"><label>Operaciones extra</label><div id="cot-ops"></div>
               <button type="button" class="cot-add" onclick="addCotOp('',0,true)">+ Agregar operación</button>
               <div class="hint">c/u = por cartel · tot = monto único del trabajo.</div></div>
-            <label class="cot-chk"><input type="checkbox" id="cot-embalaje" checked onchange="cotCalc()"><span class="ti">Embalaje<small>$250 fijo · interno, no se muestra al cliente</small></span><span class="pr cot-mono" id="cot-pr-emb">$250</span></label>
+            <label class="cot-chk"><input type="checkbox" id="cot-embalaje" onchange="cotCalc()"><span class="ti">Embalaje<small>interno, no se muestra al cliente</small></span><input type="number" id="cot-embalaje-monto" placeholder="$" min="0" step="50" oninput="cotCalc()" onclick="event.stopPropagation()" style="width:80px;height:28px;padding:0 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text)"><span class="pr cot-mono" id="cot-pr-emb" style="display:none"></span></label>
             <label class="cot-chk" style="margin-bottom:0"><input type="checkbox" id="cot-envio" onchange="cotCalc()"><span class="ti">Incluir envío<small id="cot-se">según peso total del pedido</small></span><span class="pr cot-mono" id="cot-pr-e">—</span></label>
           </div>
         </div>
@@ -2095,7 +2095,7 @@ function cotSnapshot(){
     areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value,
     modo:cotModo, mm:document.getElementById("cot-mm").value, min:document.getElementById("cot-min").value,
     golpes:document.getElementById("cot-golpes").value,
-    pintura:document.getElementById("cot-pintura").checked, oxid:document.getElementById("cot-oxid").checked, envio:document.getElementById("cot-envio").checked, embalaje:document.getElementById("cot-embalaje").checked,
+    pintura:document.getElementById("cot-pintura").checked, oxid:document.getElementById("cot-oxid").checked, envio:document.getElementById("cot-envio").checked, embalaje:document.getElementById("cot-embalaje").checked, embalajeMonto:document.getElementById("cot-embalaje-monto").value,
     diseno:document.getElementById("cot-diseno").value,
     ilum:document.getElementById("cot-ilum").value, sold:document.getElementById("cot-sold").value, cil:document.getElementById("cot-cil").value,
     ops:cotOps.filter(o=>o).map(o=>({nombre:o.nombre,monto:o.monto,porUnidad:o.porUnidad})),
@@ -2216,7 +2216,8 @@ function cotReabrir(id){
   document.getElementById("cot-pintura").checked=!!c.pintura;
   document.getElementById("cot-oxid").checked=!!c.oxid;
   document.getElementById("cot-envio").checked=!!c.envio;
-  document.getElementById("cot-embalaje").checked=(c.embalaje!==undefined)?!!c.embalaje:true;
+  document.getElementById("cot-embalaje").checked=!!c.embalaje;
+  document.getElementById("cot-embalaje-monto").value=c.embalajeMonto||"";
   document.getElementById("cot-diseno").value=c.diseno||"";
   document.getElementById("cot-ilum").value=c.ilum||"";
   document.getElementById("cot-sold").value=c.sold||"";
@@ -2384,7 +2385,7 @@ function cotCompute(){
   const envPesos=(envOn&&envBase!==null)?envBase*(1+envMargen/100):0;
 
   const embalajeOn=!!(document.getElementById("cot-embalaje")||{}).checked;
-  const embalajePesos=embalajeOn?250:0;
+  const embalajePesos=embalajeOn?(parseFloat(document.getElementById("cot-embalaje-monto").value)||0):0;
   const unit=matPesos+cortePesos+plegPesos+pintPesos+oxidPesos+opUnit+ilum+manoObra;
   const total=unit*cant+opOnce+diseno+envPesos+embalajePesos;
   const descPct=Math.max(0,Math.min(100,parseFloat(document.getElementById("cot-descuento").value)||0));
@@ -2518,7 +2519,8 @@ function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;
   ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
-  document.getElementById("cot-embalaje").checked=true;
+  document.getElementById("cot-embalaje").checked=false;
+  document.getElementById("cot-embalaje-monto").value="";
   cotDelImg();
   document.getElementById("cot-plazo").value="15 días hábiles desde la confirmación";
   document.getElementById("cot-pago").value="50% al confirmar el pedido y 50% contra entrega.\nMercado Pago: hasta 12 cuotas sin interés.";
