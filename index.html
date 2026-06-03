@@ -157,6 +157,23 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .prod-card{background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:11px 14px;display:flex;align-items:center;gap:12px;margin-bottom:8px}
 .prod-btn-cut{background:#2e7d32;color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:12px;font-weight:600;padding:6px 13px;cursor:pointer;white-space:nowrap}
 .prod-btn-cut:hover{background:#1b5e20}
+/* PAGOS */
+.pago-panel{background:#f4f6fb;border:1px solid #c5cae9;border-radius:var(--radius);padding:12px 14px;margin:4px 0 8px}
+.pago-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #e0e4f0;font-size:13px}
+.pago-row:last-child{border:none}
+.pago-forma{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e8eaf6;color:#3949ab}
+.pago-forma.ef{background:#e8f5e9;color:#2e7d32}
+.pago-forma.mp{background:#fce4ec;color:#c62828}
+.pago-del{background:none;border:none;color:#aaa;font-size:14px;cursor:pointer;padding:2px 4px;margin-left:auto}
+.pago-del:hover{color:#b22020}
+.pago-summary{display:flex;gap:16px;margin:10px 0 10px;font-size:13px;font-weight:700;flex-wrap:wrap}
+.pago-add{display:flex;gap:8px;align-items:center;margin-top:6px}
+.pago-add input{height:34px;padding:0 10px;border:1px solid #c5cae9;border-radius:var(--radius);font:inherit;font-size:13px;background:#fff;width:120px}
+.pago-add select{height:34px;padding:0 8px;border:1px solid #c5cae9;border-radius:var(--radius);font:inherit;font-size:13px;background:#fff}
+.pago-add button{height:34px;padding:0 14px;background:#3949ab;color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.pago-add button:hover{background:#283593}
+.btn-pagos{background:#e8eaf6;border:1px solid #9fa8da;color:#3949ab;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
+.btn-pagos:hover{background:#c5cae9}
 /* PRESUPUESTO IMPRIMIBLE */
 #cot-presupuesto{display:none}
 @media print{
@@ -2631,6 +2648,9 @@ function renderCotHist(){
   const totalVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+c.total,0);
   const totalUSDVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+(c.totalUSD||0),0);
   const totalPendiente=pendientes.reduce((s,c)=>s+c.total,0);
+  // Saldo total cobrado vs pendiente de cobro
+  const totalCobrado=[...aceptadas,...cortadas].reduce((s,c)=>s+_pagosTotales(c),0);
+  const totalSaldo=totalVentas-totalCobrado;
 
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
     <div style="background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:12px 14px">
@@ -2654,18 +2674,32 @@ function renderCotHist(){
     </div>
   </div>`;
 
+  // Resumen cobros
+  if(totalVentas>0){
+    html+=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:#f4f6fb;border:1px solid #c5cae9;border-radius:var(--radius);font-size:13px">
+      <span>💰 <b>Cobrado:</b> <span style="color:#2e7d32;font-weight:700">${cotFmt(totalCobrado)}</span></span>
+      <span>⏳ <b>Saldo pendiente:</b> <span style="color:${totalSaldo>0?"#b22020":"#2e7d32"};font-weight:700">${cotFmt(totalSaldo)}</span></span>
+    </div>`;
+  }
+
   // Sección "Para cortar"
   if(aceptadas.length){
     html+=`<div style="margin-bottom:18px">
       <div style="font-size:12px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">✂ Para cortar (${aceptadas.length})</div>
-      ${aceptadas.map(c=>`
-        <div class="prod-card">
+      ${aceptadas.map(c=>{
+        const pagado=_pagosTotales(c);
+        const saldo=c.total-pagado;
+        const pagoBadge=pagado>0?(saldo<=0?'<span style="font-size:11px;font-weight:700;background:#c8e6c9;color:#1b5e20;padding:2px 8px;border-radius:20px;margin-left:8px">✅ Pagado</span>':`<span style="font-size:11px;font-weight:700;background:#fff9c4;color:#f57f17;padding:2px 8px;border-radius:20px;margin-left:8px">Seña ${cotFmt(pagado)} · Saldo ${cotFmt(saldo)}</span>`):'';
+        return `<div class="prod-card">
           <div style="flex:1">
-            <div style="font-size:13.5px;font-weight:700;color:var(--green-text)">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}</div>
+            <div style="font-size:13.5px;font-weight:700;color:var(--green-text);display:flex;align-items:center;flex-wrap:wrap;gap:4px">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}${pagoBadge}</div>
             <div style="font-size:11.5px;color:var(--green-text);opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(c.total)}</div>
           </div>
+          <button class="btn-pagos" onclick="cotTogglePagos(${c.id})" style="margin-right:6px">💳 Pagos</button>
           <button class="prod-btn-cut" onclick="cotSetEstado(${c.id},'cortada')">✂ Marcar cortada</button>
-        </div>`).join('')}
+        </div>
+        <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
+      }).join('')}
     </div>`;
   }
 
@@ -2684,24 +2718,100 @@ function renderCotHist(){
     const estado=c.estado||"pendiente";
     const ecfg=ESTADO_CFG[estado]||ESTADO_CFG.pendiente;
     const matInfo=c.soloCorte?"Solo corte":(c.mat+(c.esp?" · "+c.esp:""));
-    return `<div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div>
-        <div class="cot-hist-job">${c.job||"Sin nombre"}</div>
-        <div class="cot-hist-sub">${f} · ${matInfo} · ${c.cant} u.</div>
+    const conPagos=(estado==="aceptada"||estado==="cortada");
+    const pagado=conPagos?_pagosTotales(c):0;
+    const saldo=c.total-pagado;
+    const pagoSub=conPagos&&pagado>0?` · <span style="color:${saldo<=0?"#2e7d32":"#f57f17"};font-weight:700">${saldo<=0?"✅ Pagado":"Seña "+cotFmt(pagado)+" · Saldo "+cotFmt(saldo)}</span>`:"";
+    return `<div style="border-bottom:1px solid var(--border)">
+      <div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto ${conPagos?"auto":""};gap:8px;align-items:center;padding:10px 0;border:none">
+        <div>
+          <div class="cot-hist-job">${c.job||"Sin nombre"}</div>
+          <div class="cot-hist-sub">${f} · ${matInfo} · ${c.cant} u.${pagoSub}</div>
+        </div>
+        <div class="cot-hist-tot cot-mono">${cotFmt(c.total)}</div>
+        <select onchange="cotSetEstado(${c.id},this.value)" style="height:28px;padding:0 6px;border-radius:5px;font-size:12px;font-weight:600;border:1px solid ${ecfg.color};background:${ecfg.bg};color:${ecfg.color};cursor:pointer">
+          <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
+          <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
+          <option value="cortada" ${estado==="cortada"?"selected":""}>✂ Cortada</option>
+          <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
+        </select>
+        ${conPagos?`<button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>`:""}
+        <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
+        <button class="cot-hist-del" onclick="cotBorrarHist(${c.id})">🗑</button>
       </div>
-      <div class="cot-hist-tot cot-mono">${cotFmt(c.total)}</div>
-      <select onchange="cotSetEstado(${c.id},this.value)" style="height:28px;padding:0 6px;border-radius:5px;font-size:12px;font-weight:600;border:1px solid ${ecfg.color};background:${ecfg.bg};color:${ecfg.color};cursor:pointer">
-        <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
-        <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
-        <option value="cortada" ${estado==="cortada"?"selected":""}>✂ Cortada</option>
-        <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
-      </select>
-      <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
-      <button class="cot-hist-del" onclick="cotBorrarHist(${c.id})">🗑</button>
+      ${conPagos?`<div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`:""}
     </div>`;
   }).join("");
   el.innerHTML=html;
 }
+// ---- Pagos de cotizaciones ----
+let _pagosPanelAbiertos=new Set();
+
+function _pagosTotales(c){return(c.pagos||[]).reduce((s,p)=>s+(p.monto||0),0);}
+
+function _formaLabel(f){return f==="efectivo"?"Efectivo":f==="mercadopago"?"Mercado Pago":"Transferencia";}
+function _formaClass(f){return f==="efectivo"?"ef":f==="mercadopago"?"mp":"";}
+
+function _renderPagoPanel(c){
+  const pagos=c.pagos||[];
+  const pagado=_pagosTotales(c);
+  const saldo=c.total-pagado;
+  let h="";
+  if(pagos.length){
+    h+=pagos.map(p=>`<div class="pago-row">
+      <span style="font-weight:700;font-size:13px">${cotFmt(p.monto)}</span>
+      <span class="pago-forma ${_formaClass(p.forma)}">${_formaLabel(p.forma)}</span>
+      <span style="color:var(--text3);font-size:12px">${p.fecha||""}</span>
+      <button class="pago-del" onclick="cotBorrarPago(${c.id},${p.id})">🗑</button>
+    </div>`).join("");
+  } else {
+    h+=`<div style="color:var(--text3);font-size:13px;margin-bottom:8px">Sin pagos registrados.</div>`;
+  }
+  h+=`<div class="pago-summary">
+    <span>Total: <b>${cotFmt(c.total)}</b></span>
+    <span>Cobrado: <b style="color:#2e7d32">${cotFmt(pagado)}</b></span>
+    <span>Saldo: <b style="color:${saldo<=0?"#2e7d32":"#c62828"}">${cotFmt(saldo)}</b></span>
+  </div>`;
+  h+=`<div class="pago-add">
+    <input type="number" id="pago-monto-${c.id}" placeholder="Monto $" min="1" onkeydown="if(event.key==='Enter')cotAgregarPago(${c.id})">
+    <select id="pago-forma-${c.id}">
+      <option value="transferencia">Transferencia</option>
+      <option value="efectivo">Efectivo</option>
+      <option value="mercadopago">Mercado Pago</option>
+    </select>
+    <button onclick="cotAgregarPago(${c.id})">+ Registrar pago</button>
+  </div>`;
+  return h;
+}
+
+function cotTogglePagos(id){
+  if(_pagosPanelAbiertos.has(id))_pagosPanelAbiertos.delete(id);
+  else _pagosPanelAbiertos.add(id);
+  const el=document.getElementById("cot-pagos-"+id);
+  if(el)el.style.display=_pagosPanelAbiertos.has(id)?"block":"none";
+}
+
+function cotAgregarPago(cotId){
+  const montoEl=document.getElementById("pago-monto-"+cotId);
+  const formaEl=document.getElementById("pago-forma-"+cotId);
+  const monto=parseFloat(montoEl.value);
+  if(!monto||monto<=0){showToast("⚠️ Ingresá un monto válido");montoEl.focus();return;}
+  const c=cotizaciones.find(x=>x.id===cotId);if(!c)return;
+  if(!c.pagos)c.pagos=[];
+  c.pagos.push({id:Date.now(),fecha:new Date().toLocaleDateString("es-UY",{day:"2-digit",month:"2-digit",year:"2-digit"}),monto,forma:formaEl.value});
+  guardarEnServidor();
+  renderCotHist();
+  showToast("💰 Pago registrado");
+}
+
+function cotBorrarPago(cotId,pagoId){
+  if(!confirm("¿Eliminar este pago?"))return;
+  const c=cotizaciones.find(x=>x.id===cotId);if(!c)return;
+  c.pagos=(c.pagos||[]).filter(p=>p.id!==pagoId);
+  guardarEnServidor();
+  renderCotHist();
+}
+
 function cotReabrir(id){
   const c=cotizaciones.find(x=>x.id===id);if(!c)return;
   document.getElementById("cot-job").value=c.job==="Sin nombre"?"":c.job;
