@@ -2512,6 +2512,7 @@ function cotValidar(){
 
 // ---- Pedidos para cotizar ----
 let _pedImg=null; // imagen temporal mientras se llena el formulario
+let _pedidoActivoId=null; // id del pedido que se está cotizando
 
 function pedSetImg(input){
   const f=input.files&&input.files[0];if(!f)return;
@@ -2594,6 +2595,7 @@ function cargarPedidoEnCot(id){
     document.getElementById("cot-img-del").style.display="inline";
   }
   cotCalc();
+  _pedidoActivoId=id; // cuando se guarde la cotización, este pedido se borra solo
   switchTab('cotizador',document.querySelector('.tab[onclick*="cotizador"]'));
   document.getElementById("cot-job").scrollIntoView({behavior:"smooth",block:"center"});
   document.getElementById("cot-job").focus();
@@ -2605,6 +2607,12 @@ function cotGuardar(silencioso){
   if(typeof cotizaciones==="undefined")window.cotizaciones=[];
   cotizaciones.unshift(cotSnapshot());
   cotNextNum=(cotNextNum||1)+1;
+  // Si vino de un pedido, borrarlo automáticamente
+  if(_pedidoActivoId){
+    pedidos=pedidos.filter(p=>p.id!==_pedidoActivoId);
+    _pedidoActivoId=null;
+    renderPedidos();
+  }
   if(typeof guardarEnServidor==="function")guardarEnServidor();
   renderCotHist();
   if(!silencioso&&typeof showToast==="function")showToast("💾 Cotización guardada");
@@ -3021,7 +3029,7 @@ function cotImprimir(){
   Promise.all(pending).then(()=>window.print());
 }
 
-function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;
+function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;_pedidoActivoId=null;
   ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
