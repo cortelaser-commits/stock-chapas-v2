@@ -799,11 +799,15 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
               <div class="cot-f"><label>Plazo de entrega</label><input type="text" id="cot-plazo" value="15 días hábiles desde la confirmación" oninput="cotCalc()"></div>
               <div class="cot-f"><label>Validez del presupuesto</label><input type="text" id="cot-validez" value="15 días" oninput="cotCalc()"></div>
             </div>
+            <div class="cot-f">
+              <label>🏷️ Descuento al cliente (%)</label>
+              <input type="number" class="cot-mono" id="cot-descuento" placeholder="0" min="0" max="100" step="1" oninput="cotCalc()" style="max-width:120px">
+              <div class="hint">Si ponés un valor, el PDF muestra el precio original tachado y el precio con descuento en rojo.</div>
+            </div>
             <div class="cot-f" style="margin-bottom:0">
               <label>Forma de pago</label>
               <textarea id="cot-pago" rows="4" style="width:100%;padding:10px 11px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface2);color:var(--text);font-family:inherit;resize:vertical;line-height:1.4" oninput="cotCalc()">50% al confirmar el pedido y 50% contra entrega.
-Mercado Pago: hasta 12 cuotas sin interés.
-Transferencia bancaria: 10% de descuento.</textarea>
+Mercado Pago: hasta 12 cuotas sin interés.</textarea>
             </div>
           </div>
         </div>
@@ -840,7 +844,12 @@ Transferencia bancaria: 10% de descuento.</textarea>
           <div class="cot-res-h"><div class="t">Presupuesto</div><div class="job" id="cot-r-job">Sin nombre</div></div>
           <div class="cot-lines" id="cot-r-lines"></div>
           <div class="cot-unit"><span>Precio por cartel</span><b class="cot-mono" id="cot-r-unit">$0</b></div>
-          <div class="cot-total"><div class="lbl">Total (<span id="cot-r-cant">1</span> u.)</div><div class="big cot-mono" id="cot-r-total">$0</div><div class="usd cot-mono" id="cot-r-usd">US$0</div></div>
+          <div class="cot-total"><div class="lbl">Total (<span id="cot-r-cant">1</span> u.)</div>
+            <div id="cot-r-total-orig" class="cot-mono" style="display:none;font-size:14px;opacity:.6;text-decoration:line-through;margin-bottom:2px">$0</div>
+            <div class="big cot-mono" id="cot-r-total">$0</div>
+            <div class="usd cot-mono" id="cot-r-usd">US$0</div>
+            <div id="cot-r-desc-badge" style="display:none;margin-top:6px;background:#e8f5e9;color:#1b5e20;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;text-align:center"></div>
+          </div>
           <div class="cot-btns" style="flex-direction:column">
             <button class="cot-btn" style="background:var(--text);color:#fff;width:100%" onclick="cotGuardar()">💾 Guardar cotización</button>
             <div style="display:flex;gap:8px;width:100%">
@@ -2092,7 +2101,8 @@ function cotSnapshot(){
     ops:cotOps.filter(o=>o).map(o=>({nombre:o.nombre,monto:o.monto,porUnidad:o.porUnidad})),
     plazo:document.getElementById("cot-plazo").value, pago:document.getElementById("cot-pago").value, validez:document.getElementById("cot-validez").value,
     imagen:cotImg, soloCorte,
-    total:r.total, totalUSD:r.totalUSD,
+    descuento:parseFloat(document.getElementById("cot-descuento").value)||0,
+    total:r.total, totalConDesc:r.totalConDesc, descPct:r.descPct, totalUSD:r.totalUSD,
     estado:"pendiente"
   };
 }
@@ -2216,6 +2226,7 @@ function cotReabrir(id){
   if(c.plazo!==undefined)document.getElementById("cot-plazo").value=c.plazo;
   if(c.pago!==undefined)document.getElementById("cot-pago").value=c.pago;
   if(c.validez!==undefined)document.getElementById("cot-validez").value=c.validez;
+  document.getElementById("cot-descuento").value=c.descuento||"";
   if(c.imagen){cotImg=c.imagen;const p=document.getElementById("cot-img-prev");p.src=cotImg;p.style.display="block";document.getElementById("cot-img-del").style.display="inline";}
   else{cotDelImg();}
   cotStock();cotCalc();
@@ -2376,8 +2387,10 @@ function cotCompute(){
   const embalajePesos=embalajeOn?250:0;
   const unit=matPesos+cortePesos+plegPesos+pintPesos+oxidPesos+opUnit+ilum+manoObra;
   const total=unit*cant+opOnce+diseno+envPesos+embalajePesos;
+  const descPct=Math.max(0,Math.min(100,parseFloat(document.getElementById("cot-descuento").value)||0));
+  const totalConDesc=descPct>0?Math.round(total*(1-descPct/100)):total;
   return {dolar,cant,mat,esp,kg,matPesos,cortePesos,corteDesc,golpes,plegPesos,pintOn,oxidOn,pintPesos,oxidPesos,
-    opList,opOnce,diseno,ilum,sold,cil,manoObra,envOn,envPesos,envBase,envMargen,envExcede,pesoTotal,unit,total,totalUSD:dolar>0?total/dolar:0,markup,pGolpe,embalajeOn,embalajePesos};
+    opList,opOnce,diseno,ilum,sold,cil,manoObra,envOn,envPesos,envBase,envMargen,envExcede,pesoTotal,unit,total,totalConDesc,descPct,totalUSD:dolar>0?total/dolar:0,totalUSDConDesc:dolar>0?totalConDesc/dolar:0,markup,pGolpe,embalajeOn,embalajePesos};
 }
 
 function cotLine(l,sub,v,mut){return '<div class="cot-line'+(mut?' mut':'')+'"><div class="l">'+l+'<small>'+sub+'</small></div><div class="v cot-mono">'+v+'</div></div>';}
@@ -2390,8 +2403,15 @@ function cotCalc(){
   document.getElementById("cot-r-cant").textContent=r.cant;
   document.getElementById("cot-r-job").textContent=document.getElementById("cot-job").value||"Sin nombre";
   document.getElementById("cot-r-unit").textContent=cotFmt(r.unit);
-  document.getElementById("cot-r-total").textContent=cotFmt(r.total);
-  document.getElementById("cot-r-usd").textContent="≈ "+cotFmtUSD(r.totalUSD);
+  const hayDesc=r.descPct>0;
+  document.getElementById("cot-r-total-orig").style.display=hayDesc?"block":"none";
+  document.getElementById("cot-r-total-orig").textContent=cotFmt(r.total);
+  document.getElementById("cot-r-total").textContent=cotFmt(r.totalConDesc);
+  document.getElementById("cot-r-total").style.color=hayDesc?"#c62828":"";
+  document.getElementById("cot-r-usd").textContent="≈ "+cotFmtUSD(r.totalUSDConDesc);
+  const badge=document.getElementById("cot-r-desc-badge");
+  badge.style.display=hayDesc?"block":"none";
+  if(hayDesc)badge.textContent=r.descPct+"% OFF";
   document.getElementById("cot-pr-p").textContent=r.pintOn?cotFmt(r.pintPesos):"—";
   document.getElementById("cot-pr-o").textContent=r.oxidOn?cotFmt(r.oxidPesos):"—";
   document.getElementById("cot-pr-e").textContent=r.envOn?(r.envExcede?"Consultar":cotFmt(r.envPesos)):"—";
@@ -2462,7 +2482,14 @@ function cotImprimir(){
     +imgHTML
     +'<div class="pdetail"><div class="ptitle">Detalle del trabajo</div><ul>'+detalle+'</ul></div>'
     +'<table class="pprice"><tbody>'+preciosRows+'</tbody></table>'
-    +'<div class="ptotalbox"><div class="ptlabel">TOTAL</div><div class="ptnum">'+cotFmt(r.total)+'</div></div>'
+    +(r.descPct>0
+      ? '<div class="ptotalbox"><div class="ptlabel">TOTAL</div>'
+        +'<div style="font-size:15px;opacity:.55;text-decoration:line-through;margin-bottom:4px">'+cotFmt(r.total)+'</div>'
+        +'<div class="ptnum" style="color:#c62828">'+cotFmt(r.totalConDesc)+'</div>'
+        +'<div style="display:inline-block;background:#c62828;color:#fff;font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;margin-top:6px">'+r.descPct+'% OFF</div>'
+        +'</div>'
+      : '<div class="ptotalbox"><div class="ptlabel">TOTAL</div><div class="ptnum">'+cotFmt(r.total)+'</div></div>'
+    )
     +'<div class="pterms"><div class="ptermrow"><b>Plazo de entrega:</b> '+plazo+'</div>'
     +'<div class="ptermrow"><b>Forma de pago:</b> '+pago+'</div></div>'
     +'<div class="pbank"><div class="pbankinfo"><div class="pbanktitle">Datos para el pago</div>'
@@ -2494,7 +2521,8 @@ function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;
   document.getElementById("cot-embalaje").checked=true;
   cotDelImg();
   document.getElementById("cot-plazo").value="15 días hábiles desde la confirmación";
-  document.getElementById("cot-pago").value="50% al confirmar el pedido y 50% contra entrega.\nMercado Pago: hasta 12 cuotas sin interés.\nTransferencia bancaria: 10% de descuento.";
+  document.getElementById("cot-pago").value="50% al confirmar el pedido y 50% contra entrega.\nMercado Pago: hasta 12 cuotas sin interés.";
+  document.getElementById("cot-descuento").value="";
   document.getElementById("cot-validez").value="15 días";
   cotCalc();}
 // ════════════════ FIN COTIZADOR ════════════════
