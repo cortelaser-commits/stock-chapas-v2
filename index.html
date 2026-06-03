@@ -3100,9 +3100,10 @@ function cotCompute(){
   const colocacionOn=!!(document.getElementById("cot-colocacion")?.checked);
   const colocacionPesos=colocacionOn?(parseFloat(document.getElementById("cot-colocacion-monto")?.value)||0):0;
   const unit=matPesos+cortePesos+plegPesos+pintPesos+oxidPesos+opUnit+ilum+manoObra;
-  const total=unit*cant+opOnce+diseno+envPesos+embalajePesos+colocacionPesos;
+  const totalRaw=unit*cant+opOnce+diseno+envPesos+embalajePesos+colocacionPesos;
+  const total=Math.ceil(totalRaw/10)*10; // siempre redondear para arriba al 10 más cercano
   const descPct=Math.max(0,Math.min(100,parseFloat(document.getElementById("cot-descuento").value)||0));
-  const totalConDesc=descPct>0?Math.round(total*(1-descPct/100)):total;
+  const totalConDesc=descPct>0?Math.ceil(total*(1-descPct/100)/10)*10:total;
   return {dolar,cant,mat,esp,kg,matPesos,cortePesos,corteDesc,golpes,plegPesos,pintOn,oxidOn,pintPesos,oxidPesos,
     opList,opOnce,diseno,ilum,sold,cil,manoObra,envOn,envPesos,envBase,envMargen,envExcede,pesoTotal,unit,total,totalConDesc,descPct,totalUSD:dolar>0?total/dolar:0,totalUSDConDesc:dolar>0?totalConDesc/dolar:0,markup,pGolpe,embalajeOn,embalajePesos,colocacionOn,colocacionPesos};
 }
