@@ -1263,30 +1263,9 @@ function render(){
       </div>
     </div>`;
   });
-  // Mostrar agotados cuando el filtro es "crit" o "all"
-  const agotados=window.agotados||[];
-  if(agotados.length>0 && (filter==="crit"||filter==="all")){
-    html+=`<div class="pallet-section" style="border-left:4px solid #e04040">
-      <div class="pallet-header" style="border-left:none">
-        <span>🔴</span>
-        <span class="pallet-num" style="color:#b22020">Sin stock — Reponer</span>
-        <span class="pallet-count">${agotados.length} ítem${agotados.length!==1?"s":""}</span>
-      </div>
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr>
-          <th>Material</th><th>Espesor</th><th>Pallet</th><th>Estado</th><th></th>
-        </tr></thead>
-        <tbody>
-        ${agotados.map((a,i)=>`<tr>
-          <td><span class="mat-tag ${matClass(a.mat)}">${a.mat}</span></td>
-          <td style="font-weight:600">${a.esp}</td>
-          <td>Pallet ${a.pallet}</td>
-          <td><span class="badge badge-crit">🔴 Sin stock</span></td>
-          <td><button onclick="quitarAgotado(${i})" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text3)" title="Quitar de la lista">✕ Quitar</button></td>
-        </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>`;
+  // Análisis de faltantes solo en filtro "Sin stock"
+  if(filter==="crit"){
+    html+=renderFaltantes();
     any=true;
   }
   if(!any)html=`<div class="empty">No hay resultados</div>`;
@@ -1578,11 +1557,60 @@ function updateStats(){
     document.getElementById("alert-crit-text").textContent="SIN STOCK — Reponer urgente: "+todos.map(x=>x.mat+" "+x.esp+" (Pallet "+x.pallet+")").join(" · ");
   } else bc.style.display="none";
 }
-function quitarAgotado(i){
-  if(!window.agotados)return;
-  window.agotados.splice(i,1);
-  render();guardarEnServidor();
-  showToast("✓ Quitado de la lista de sin stock");
+// Rangos de chapas enteras que deberían estar en stock
+const STOCK_DESEADO={
+  "Inox 304":      ["0.4mm","0.5mm","0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","2.5mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],
+  "Inox 316":      ["0.5mm","0.8mm","1mm","1.2mm","1.5mm","2mm","2.5mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],
+  "Inox 430":      ["0.4mm","0.5mm","0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm"],
+  "Galvanizada":   ["0.4mm","0.5mm","0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","2.5mm","3mm"],
+  "Acero Carbono": ["0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm",'1/8"','3/16"','1/4"','5/16"','3/8"','1/2"','5/8"','3/4"'],
+  "Acero Descapado":["0.6mm","0.8mm","1mm","1.2mm","1.5mm","2mm","3mm"],
+  "Acero Corten":  ["1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm",'1/8"','3/16"','1/4"','3/8"','1/2"'],
+};
+
+function renderFaltantes(){
+  let html='';
+  let totalFaltantes=0;
+  Object.entries(STOCK_DESEADO).forEach(([mat,espesores])=>{
+    const faltantes=[], disponibles=[];
+    espesores.forEach(esp=>{
+      const hay=items.some(it=>it.mat===mat && it.esp===esp && it.qty>0 &&
+        (it.tipo==="Entera"||it.tipo==="Entera"||it.tipo?.toLowerCase().includes("entera")));
+      if(hay) disponibles.push(esp);
+      else faltantes.push(esp);
+    });
+    if(!faltantes.length) return; // todo OK para este material
+    totalFaltantes+=faltantes.length;
+    html+=`<div class="pallet-section" style="margin-bottom:12px">
+      <div class="pallet-header">
+        <span class="mat-tag ${matClass(mat)}">${mat}</span>
+        <span style="font-size:12px;color:var(--red-text);font-weight:600;margin-left:4px">
+          ${faltantes.length} sin stock
+        </span>
+        ${disponibles.length?`<span style="font-size:12px;color:var(--green-text);font-weight:600">· ${disponibles.length} OK</span>`:''}
+        <span class="pallet-count">${espesores.length} espesores totales</span>
+      </div>
+      <div style="padding:14px 16px;display:flex;flex-wrap:wrap;gap:8px">
+        ${espesores.map(esp=>{
+          const hay=disponibles.includes(esp);
+          return `<span style="
+            display:inline-flex;align-items:center;gap:5px;
+            padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;
+            background:${hay?'var(--green-bg)':'var(--red-bg)'};
+            color:${hay?'var(--green-text)':'var(--red-text)'};
+            border:1px solid ${hay?'#b6d9b6':'#f0b6b6'};
+          ">${hay?'✓':'✗'} ${esp}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+  if(!totalFaltantes) return `<div style="text-align:center;padding:32px;color:var(--green-text);font-size:15px;font-weight:600">✅ Tenés stock de todas las medidas estándar</div>`;
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow);margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;color:var(--text2)">
+      📋 Análisis de stock — Chapas enteras faltantes
+    </div>
+    ${html}
+  </div>`;
 }
 function cerrarAlertaStock(){
   window._alertaDismiss=window._alertaStockSig||"";
