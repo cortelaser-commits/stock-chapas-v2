@@ -629,7 +629,10 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
         <div style="font-size:15px;font-weight:700;margin-bottom:6px">💰 Precios por kg en USD</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Al actualizar los precios se aplican a todos los consumos nuevos automáticamente.</div>
         <div id="tabla-precios-ui"></div>
-        <button onclick="guardarPrecios()" style="margin-top:20px;height:38px;padding:0 24px;background:#1a1917;color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;width:100%">💾 Guardar precios</button>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button onclick="guardarPrecios()" style="flex:1;height:38px;padding:0 24px;background:#1a1917;color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer">💾 Guardar precios</button>
+          <button onclick="guardarPrecios();actualizarPreciosDesdeTabla()" style="flex:1;height:38px;padding:0 16px;background:#1565c0;color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer" title="Aplica el precio actual a todos los ítems del stock">🔄 Aplicar a todo el stock</button>
+        </div>
       </div>
     </div>
   </div>
