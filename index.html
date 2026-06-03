@@ -1263,6 +1263,32 @@ function render(){
       </div>
     </div>`;
   });
+  // Mostrar agotados cuando el filtro es "crit" o "all"
+  const agotados=window.agotados||[];
+  if(agotados.length>0 && (filter==="crit"||filter==="all")){
+    html+=`<div class="pallet-section" style="border-left:4px solid #e04040">
+      <div class="pallet-header" style="border-left:none">
+        <span>🔴</span>
+        <span class="pallet-num" style="color:#b22020">Sin stock — Reponer</span>
+        <span class="pallet-count">${agotados.length} ítem${agotados.length!==1?"s":""}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th>Material</th><th>Espesor</th><th>Pallet</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${agotados.map((a,i)=>`<tr>
+          <td><span class="mat-tag ${matClass(a.mat)}">${a.mat}</span></td>
+          <td style="font-weight:600">${a.esp}</td>
+          <td>Pallet ${a.pallet}</td>
+          <td><span class="badge badge-crit">🔴 Sin stock</span></td>
+          <td><button onclick="quitarAgotado(${i})" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text3)" title="Quitar de la lista">✕ Quitar</button></td>
+        </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+    any=true;
+  }
   if(!any)html=`<div class="empty">No hay resultados</div>`;
   cont.innerHTML=html;updateStats();
 }
@@ -1551,6 +1577,12 @@ function updateStats(){
     bc.style.display="flex";
     document.getElementById("alert-crit-text").textContent="SIN STOCK — Reponer urgente: "+todos.map(x=>x.mat+" "+x.esp+" (Pallet "+x.pallet+")").join(" · ");
   } else bc.style.display="none";
+}
+function quitarAgotado(i){
+  if(!window.agotados)return;
+  window.agotados.splice(i,1);
+  render();guardarEnServidor();
+  showToast("✓ Quitado de la lista de sin stock");
 }
 function cerrarAlertaStock(){
   window._alertaDismiss=window._alertaStockSig||"";
