@@ -474,6 +474,8 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
   <div class="topbar-actions">
     <div class="sync-indicator"><span class="sync-dot" id="sync-dot"></span><span id="sync-txt">Conectando...</span></div>
     <button class="btn-top" onclick="descargarBackup()" title="Descargar copia de seguridad completa">💾 Backup</button>
+    <button class="btn-top" onclick="document.getElementById('input-restaurar').click()" title="Restaurar desde archivo de backup">↩ Restaurar</button>
+    <input type="file" id="input-restaurar" accept=".json" style="display:none" onchange="restaurarDesdeArchivo(this)">
     <button class="btn-top" onclick="exportCSV()">⬇ Exportar CSV</button>
   </div>
 </div>
@@ -1059,7 +1061,7 @@ function _dataHash(){
   // Checksum liviano para detectar si los datos realmente cambiaron
   let h=0;
   for(const it of items) h=(h*31+it.id*17+it.qty*7+(it.precio||0)*3)>>>0;
-  h=(h*31+historial.length*13+items.length*7)>>>0;
+  h=(h*31+historial.length*13+items.length*7+(cotizaciones||[]).length*19+(cotNextNum||0)*11)>>>0;
   return h;
 }
 
@@ -1124,6 +1126,35 @@ function descargarBackup(){
     a.click();
     showToast("💾 Backup descargado");
   }catch(e){showToast("⚠️ Error al descargar backup");}
+}
+
+function restaurarDesdeArchivo(input){
+  const file=input.files[0];
+  input.value="";
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.items||!Array.isArray(data.items)){showToast("⚠️ Archivo inválido");return;}
+      const cots=data.cotizaciones?.length||0;
+      const its=data.items?.length||0;
+      if(!confirm(`¿Restaurar backup?\n\n• ${its} ítems de stock\n• ${cots} cotizaciones\n• Fecha: ${new Date(data.ts).toLocaleString("es-UY")}\n\nEsto reemplazará los datos actuales.`))return;
+      items=data.items; nextId=data.nextId||100;
+      historial=data.historial||[];
+      if(data.laserItems)laserItems=data.laserItems;
+      if(data.laserNextId)laserNextId=data.laserNextId;
+      if(data.cotizaciones)cotizaciones=data.cotizaciones;
+      if(data.cotNextNum)cotNextNum=data.cotNextNum;
+      if(data.agotados)window.agotados=data.agotados;
+      _cotizacionesCargadas=cotizaciones.length;
+      _lastSavedHash=null;
+      guardarEnServidor();
+      render();renderHistorial();poblarSelectorMes();if(typeof renderCotHist==="function")renderCotHist();
+      showToast("✅ Backup restaurado y guardado en servidor");
+    }catch(err){showToast("⚠️ Error al leer el archivo");}
+  };
+  reader.readAsText(file);
 }
 
 // ─── API quirúrgica — cada operación manda solo lo que cambió (~200B vs 50KB) ──
