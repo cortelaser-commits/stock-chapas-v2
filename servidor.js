@@ -205,8 +205,13 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const ts = Date.now();
       const setFields = { 'data.ts': ts };
-      if (body.qty !== undefined) setFields['data.items.$[el].qty'] = body.qty;
-      if (body.precio !== undefined) setFields['data.items.$[el].precio'] = body.precio;
+      if (body.qty     !== undefined) setFields['data.items.$[el].qty']    = body.qty;
+      if (body.precio  !== undefined) setFields['data.items.$[el].precio'] = body.precio;
+      if (body.mat     !== undefined) setFields['data.items.$[el].mat']    = body.mat;
+      if (body.esp     !== undefined) setFields['data.items.$[el].esp']    = body.esp;
+      if (body.med     !== undefined) setFields['data.items.$[el].med']    = body.med;
+      if (body.tipo    !== undefined) setFields['data.items.$[el].tipo']   = body.tipo;
+      if (body.pallet  !== undefined) setFields['data.items.$[el].pallet'] = body.pallet;
       await updateField(setFields, [{ 'el.id': itemId }]);
       jsonRes(res, 200, { ok: true, ts });
     } catch(e) { jsonRes(res, 400, { error: e.message }); }
