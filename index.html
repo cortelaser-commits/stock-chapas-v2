@@ -1932,8 +1932,9 @@ function confirmarConsumo(){
   let recorteMsg="";
   if(window._recorteGenerado&&descuento>0){
     const r=window._recorteGenerado;
-    nuevoRecorte={id:nextId++,pallet:it.pallet,mat:it.mat,esp:it.esp,med:r.w+"x"+r.h,tipo:"Recorte",qty:1};
+    nuevoRecorte={id:nextId++,pallet:it.pallet,mat:it.mat,esp:it.esp,med:r.w+"x"+r.h,tipo:"Recorte",qty:1,precio:it.precio||0};
     items.push(nuevoRecorte);
+    consumo.recorteId=nuevoRecorte.id; // guardar el link para poder borrar al anular
     apiPayload.recorte=nuevoRecorte;
     apiPayload.nextId=nextId;
     recorteMsg=" · ✂️ Recorte "+r.w+"×"+r.h+"mm generado en Pallet "+it.pallet;
@@ -2024,20 +2025,24 @@ function eliminarConsumo(id){
 function anularConsumo(id){
   const h=historial.find(x=>x.id===id);
   if(!h||h.anulado)return;
-  if(!confirm("¿Anular este consumo de "+h.proyecto+"? Se va a devolver "+h.qty_descontada+" unidad(es) al stock."))return;
+  const tieneRecorte=h.recorteId&&items.find(x=>x.id===h.recorteId);
+  const msg="¿Anular este consumo de "+h.proyecto+"?\n\n• Se devuelven "+h.qty_descontada+" unidad(es) al stock"+(tieneRecorte?"\n• Se elimina el recorte generado automáticamente":"")+".";
+  if(!confirm(msg))return;
   h.anulado=true;
+
   // Devolver stock si corresponde
   if(h.qty_descontada>0){
-    const it=items.find(x=>x.mat===h.mat&&x.esp===h.chapa.replace(h.mat+" ","")&&x.pallet===h.pallet);
+    const espStr=h.esp||(h.chapa||"").replace((h.mat||"")+" ","");
+    const it=items.find(x=>x.mat===h.mat&&x.esp===espStr&&x.pallet===h.pallet);
     if(it){
       it.qty+=h.qty_descontada;
     } else {
-      // La chapa fue borrada al llegar a cero — recriarla
+      // La chapa fue borrada al llegar a cero — recrearla
       items.push({
         id:nextId++,
         pallet:h.pallet,
         mat:h.mat,
-        esp:h.chapa.replace(h.mat+" ",""),
+        esp:espStr,
         med:h.med,
         tipo:h.tipo,
         qty:h.qty_descontada
@@ -2048,9 +2053,23 @@ function anularConsumo(id){
       }
     }
   }
+
+  // Eliminar el recorte generado automáticamente por este consumo
+  if(h.recorteId){
+    const recorte=items.find(x=>x.id===h.recorteId);
+    if(recorte){
+      items=items.filter(x=>x.id!==h.recorteId);
+      showToast("↩ Consumo anulado — stock restaurado y recorte eliminado");
+    } else {
+      showToast("↩ Consumo anulado — stock restaurado (recorte ya no existía)");
+    }
+  } else {
+    showToast("↩ Consumo anulado — stock restaurado");
+  }
+
   render();renderHistorial();
-  guardarEnServidor();
-  showToast("↩ Consumo anulado — stock restaurado");
+  _lastSavedHash=null;
+  guardarEnServidor(true);
 }
 
 // Poblar el selector de meses con los meses que tienen registros
