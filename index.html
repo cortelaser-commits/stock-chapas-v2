@@ -353,6 +353,7 @@ tbody td{padding:9px 14px;font-size:13px;vertical-align:middle}
   </div>
   <div class="topbar-actions">
     <div class="sync-indicator"><span class="sync-dot" id="sync-dot"></span><span id="sync-txt">Conectando...</span></div>
+    <button class="btn-top" onclick="descargarBackup()" title="Descargar copia de seguridad completa">💾 Backup</button>
     <button class="btn-top" onclick="exportCSV()">⬇ Exportar CSV</button>
   </div>
 </div>
@@ -913,13 +914,49 @@ async function cargarDesdeServidor(){
     const data=await r.json();
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
-    _datosYaCargados=true; // a partir de acá sí se puede guardar
+    _datosYaCargados=true;
+    _guardarBackupLocal();
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();
   }catch(e){
     setSyncStatus("error","⚠️ Sin conexión al servidor");
     setTimeout(cargarDesdeServidor,8000);
   }
+}
+
+// ─── Backup local ────────────────────────────────────────────────────────────
+
+function _guardarBackupLocal(){
+  try{
+    const snapshot={
+      ts:Date.now(),
+      items,nextId,historial,laserItems,laserNextId,
+      cotizaciones,cotNextNum,
+      agotados:window.agotados||[]
+    };
+    // Guardar backup actual y rotar (máximo 3)
+    const b2=localStorage.getItem("backup_1")||null;
+    const b1=localStorage.getItem("backup_0")||null;
+    if(b1)localStorage.setItem("backup_2",b1);  // el anterior pasa a ser el viejo
+    if(b2)localStorage.setItem("backup_1",b2);
+    localStorage.setItem("backup_0",JSON.stringify(snapshot));
+    localStorage.setItem("backup_ts",new Date().toLocaleString("es-UY"));
+  }catch(e){}
+}
+
+function descargarBackup(){
+  try{
+    const raw=localStorage.getItem("backup_0");
+    if(!raw){showToast("⚠️ No hay backup guardado aún — hacé un cambio primero");return;}
+    const data=JSON.parse(raw);
+    const fecha=new Date(data.ts).toISOString().slice(0,16).replace("T","_").replace(":","-");
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="stock_chapas_backup_"+fecha+".json";
+    a.click();
+    showToast("💾 Backup descargado");
+  }catch(e){showToast("⚠️ Error al descargar backup");}
 }
 
 // ─── API quirúrgica — cada operación manda solo lo que cambió (~200B vs 50KB) ──
@@ -981,6 +1018,7 @@ async function _doSave(){
     if(!r.ok)throw new Error();
     _lastSavedHash=_dataHash();
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
+    _guardarBackupLocal();
   }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
 }
 
