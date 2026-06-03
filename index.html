@@ -2666,7 +2666,7 @@ function renderCotHist(){
   const pendientes=arr.filter(c=>!c.estado||c.estado==="pendiente");
   const rechazadas=arr.filter(c=>c.estado==="rechazada");
   const cortadas=arr.filter(c=>c.estado==="cortada");
-  const totalVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+c.total,0);
+  const totalVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+_cotTotal(c),0);
   const totalUSDVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+(c.totalUSD||0),0);
   const totalPendiente=pendientes.reduce((s,c)=>s+c.total,0);
   // Saldo total cobrado vs pendiente de cobro
