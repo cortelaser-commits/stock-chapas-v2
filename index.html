@@ -146,6 +146,17 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .cot-hist-del{background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:4px}
 .cot-hist-del:hover{color:#b22020}
 
+/* PEDIDOS PARA COTIZAR */
+.ped-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.ped-row:last-child{border:none}
+.ped-btn-load{background:var(--text);color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;white-space:nowrap}
+.ped-btn-load:hover{opacity:.82}
+.ped-del{background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:4px 6px}
+.ped-del:hover{color:#b22020}
+/* PRODUCCIÓN */
+.prod-card{background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:11px 14px;display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.prod-btn-cut{background:#2e7d32;color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:12px;font-weight:600;padding:6px 13px;cursor:pointer;white-space:nowrap}
+.prod-btn-cut:hover{background:#1b5e20}
 /* PRESUPUESTO IMPRIMIBLE */
 #cot-presupuesto{display:none}
 @media print{
@@ -985,6 +996,19 @@ Mercado Pago: hasta 12 cuotas sin interés.</textarea>
         </div>
       </div>
     </div>
+    <!-- PEDIDOS PARA COTIZAR -->
+    <div class="cot-card" style="margin-top:6px">
+      <div class="cot-card-h">📝 Pedidos para cotizar <span id="ped-count" style="margin-left:auto;font-weight:500;color:var(--text3)"></span></div>
+      <div class="cot-b">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:14px">
+          <input type="text" id="ped-nombre" placeholder="Trabajo / cliente" onkeydown="if(event.key==='Enter')agregarPedido()">
+          <input type="text" id="ped-mat" placeholder="Material y espesor" onkeydown="if(event.key==='Enter')agregarPedido()">
+          <input type="text" id="ped-medida" placeholder="Medida / descripción" onkeydown="if(event.key==='Enter')agregarPedido()">
+          <button onclick="agregarPedido()" style="height:38px;padding:0 14px;background:var(--text);color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:600;cursor:pointer">+ Agregar</button>
+        </div>
+        <div id="ped-list"><div style="color:var(--text3);font-size:13px">No hay pedidos pendientes.</div></div>
+      </div>
+    </div>
     <!-- HISTORIAL DE COTIZACIONES -->
     <div class="cot-card" style="margin-top:6px">
       <div class="cot-card-h">📋 Cotizaciones guardadas <span id="cot-hist-count" style="margin-left:auto;font-weight:500;color:var(--text3)"></span></div>
@@ -1050,7 +1074,7 @@ const STD = {
   "Acero Corten":   {esp:["1.5mm","2mm","3mm","4mm","5mm","6mm","8mm","10mm","12mm"],med:["1000x2000","1220x2440","1500x3000","2000x6000"]},
 };
 
-let nextId=100, items=[], historial=[], cotizaciones=[], cotNextNum=1, filter="all", modalItemId=null, conectado=false, _histPage=0;
+let nextId=100, items=[], historial=[], cotizaciones=[], cotNextNum=1, pedidos=[], filter="all", modalItemId=null, conectado=false, _histPage=0;
 const HIST_PAGE_SIZE=20;
 let _datosYaCargados=false; // guard: no guardar hasta que el servidor responda
 let _cotizacionesCargadas=0; // mínimo de cotizaciones que sabemos que existen
@@ -1061,7 +1085,7 @@ function _dataHash(){
   // Checksum liviano para detectar si los datos realmente cambiaron
   let h=0;
   for(const it of items) h=(h*31+it.id*17+it.qty*7+(it.precio||0)*3)>>>0;
-  h=(h*31+historial.length*13+items.length*7+(cotizaciones||[]).length*19+(cotNextNum||0)*11)>>>0;
+  h=(h*31+historial.length*13+items.length*7+(cotizaciones||[]).length*19+(cotNextNum||0)*11+(pedidos||[]).length*23)>>>0;
   return h;
 }
 
@@ -1080,13 +1104,13 @@ async function cargarDesdeServidor(){
     const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(45000)});
     if(!r.ok)throw new Error();
     const data=await r.json();
-    if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;actualizarFecha(data.ts);}
+    if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;if(data.pedidos)pedidos=data.pedidos;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
     _datosYaCargados=true;
     _cotizacionesCargadas=cotizaciones.length; // registrar cuántas hay
     _guardarBackupLocal();
     setSyncStatus("ok","Sincronizado ✓");
-    inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();
+    inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();
   }catch(e){
     setSyncStatus("error","⚠️ Sin conexión al servidor");
     setTimeout(cargarDesdeServidor,8000);
@@ -1100,7 +1124,7 @@ function _guardarBackupLocal(){
     const snapshot={
       ts:Date.now(),
       items,nextId,historial,laserItems,laserNextId,
-      cotizaciones,cotNextNum,
+      cotizaciones,cotNextNum,pedidos:pedidos||[],
       agotados:window.agotados||[]
     };
     // Guardar backup actual y rotar (máximo 3)
@@ -1147,10 +1171,11 @@ function restaurarDesdeArchivo(input){
       if(data.cotizaciones)cotizaciones=data.cotizaciones;
       if(data.cotNextNum)cotNextNum=data.cotNextNum;
       if(data.agotados)window.agotados=data.agotados;
+      if(data.pedidos)pedidos=data.pedidos;
       _cotizacionesCargadas=cotizaciones.length;
       _lastSavedHash=null;
       guardarEnServidor();
-      render();renderHistorial();poblarSelectorMes();if(typeof renderCotHist==="function")renderCotHist();
+      render();renderHistorial();poblarSelectorMes();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();
       showToast("✅ Backup restaurado y guardado en servidor");
     }catch(err){showToast("⚠️ Error al leer el archivo");}
   };
@@ -1218,7 +1243,7 @@ async function _doSave(){
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Guardando...";
   try{
-    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
+    const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,pedidos:pedidos||[],agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
     if(!r.ok)throw new Error();
     _lastSavedHash=_dataHash();
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
@@ -1237,7 +1262,7 @@ setInterval(async()=>{
     if(meta&&meta.ts&&meta.ts>(window._lastTs||0)){
       const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
       const data=await r.json();
-      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();if(_vista==='grupo')renderGrupo();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();}
+      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;if(data.pedidos)pedidos=data.pedidos;window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();if(_vista==='grupo')renderGrupo();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();}
     }
   }catch(e){}finally{_sincronizando=false;}
 },SYNC_INTERVAL_MS);
@@ -2475,6 +2500,60 @@ function cotValidar(){
   return true;
 }
 
+// ---- Pedidos para cotizar ----
+function renderPedidos(){
+  const el=document.getElementById("ped-list");
+  const cnt=document.getElementById("ped-count");
+  if(!el)return;
+  const arr=pedidos||[];
+  if(cnt)cnt.textContent=arr.length?(arr.length+" pendiente"+(arr.length===1?"":"s")):"";
+  if(!arr.length){el.innerHTML='<div style="color:var(--text3);font-size:13px">No hay pedidos pendientes.</div>';return;}
+  el.innerHTML=arr.map(p=>`
+    <div class="ped-row">
+      <div style="flex:1">
+        <div class="cot-hist-job">${p.nombre}</div>
+        <div class="cot-hist-sub">${[p.mat,p.medida].filter(Boolean).join(' · ')}</div>
+      </div>
+      <button class="ped-btn-load" onclick="cargarPedidoEnCot(${p.id})">Cotizar →</button>
+      <button class="ped-del" onclick="borrarPedido(${p.id})">🗑</button>
+    </div>`).join("");
+}
+function agregarPedido(){
+  const nombre=document.getElementById("ped-nombre").value.trim();
+  if(!nombre){showToast("⚠️ Ingresá el nombre del trabajo");document.getElementById("ped-nombre").focus();return;}
+  const mat=document.getElementById("ped-mat").value.trim();
+  const medida=document.getElementById("ped-medida").value.trim();
+  pedidos.unshift({id:Date.now(),nombre,mat,medida});
+  document.getElementById("ped-nombre").value="";
+  document.getElementById("ped-mat").value="";
+  document.getElementById("ped-medida").value="";
+  renderPedidos();
+  guardarEnServidor();
+  showToast("✅ Pedido agregado");
+}
+function borrarPedido(id){
+  if(!confirm("¿Eliminar este pedido?"))return;
+  pedidos=pedidos.filter(p=>p.id!==id);
+  renderPedidos();
+  guardarEnServidor();
+}
+function cargarPedidoEnCot(id){
+  const p=pedidos.find(x=>x.id===id);if(!p)return;
+  document.getElementById("cot-job").value=p.nombre;
+  if(p.mat){
+    const matSel=document.getElementById("cot-mat");
+    const term=p.mat.toLowerCase().split(' ')[0];
+    for(let i=0;i<matSel.options.length;i++){
+      if(matSel.options[i].value.toLowerCase().includes(term)){matSel.selectedIndex=i;cotPoblarEspesores();cotPrefillPrecio();cotStock();break;}
+    }
+  }
+  cotCalc();
+  switchTab('cotizador',document.querySelector('.tab[onclick*="cotizador"]'));
+  document.getElementById("cot-job").scrollIntoView({behavior:"smooth",block:"center"});
+  document.getElementById("cot-job").focus();
+  showToast("📝 Pedido cargado — completá los datos y cotizá");
+}
+
 function cotGuardar(silencioso){
   if(!silencioso&&!cotValidar())return;
   if(typeof cotizaciones==="undefined")window.cotizaciones=[];
@@ -2494,11 +2573,12 @@ function renderCotHist(){
   const aceptadas=arr.filter(c=>c.estado==="aceptada");
   const pendientes=arr.filter(c=>!c.estado||c.estado==="pendiente");
   const rechazadas=arr.filter(c=>c.estado==="rechazada");
-  const totalVentas=aceptadas.reduce((s,c)=>s+c.total,0);
-  const totalUSDVentas=aceptadas.reduce((s,c)=>s+(c.totalUSD||0),0);
+  const cortadas=arr.filter(c=>c.estado==="cortada");
+  const totalVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+c.total,0);
+  const totalUSDVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+(c.totalUSD||0),0);
   const totalPendiente=pendientes.reduce((s,c)=>s+c.total,0);
 
-  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+  let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
     <div style="background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:12px 14px">
       <div style="font-size:11px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">Aceptadas</div>
       <div style="font-size:20px;font-weight:800;color:var(--green-text);margin-top:4px">${aceptadas.length}</div>
@@ -2510,20 +2590,41 @@ function renderCotHist(){
       <div style="font-size:20px;font-weight:800;color:var(--amber-text);margin-top:4px">${pendientes.length}</div>
       <div style="font-size:12px;color:var(--amber-text);margin-top:2px">${cotFmt(totalPendiente)}</div>
     </div>
+    <div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:var(--radius);padding:12px 14px">
+      <div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em">✂ Cortadas</div>
+      <div style="font-size:20px;font-weight:800;color:#3949ab;margin-top:4px">${cortadas.length}</div>
+    </div>
     <div style="background:var(--red-bg);border:1px solid #f0b6b6;border-radius:var(--radius);padding:12px 14px">
       <div style="font-size:11px;font-weight:700;color:var(--red-text);text-transform:uppercase;letter-spacing:.05em">Rechazadas</div>
       <div style="font-size:20px;font-weight:800;color:var(--red-text);margin-top:4px">${rechazadas.length}</div>
     </div>
   </div>`;
 
+  // Sección "Para cortar"
+  if(aceptadas.length){
+    html+=`<div style="margin-bottom:18px">
+      <div style="font-size:12px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">✂ Para cortar (${aceptadas.length})</div>
+      ${aceptadas.map(c=>`
+        <div class="prod-card">
+          <div style="flex:1">
+            <div style="font-size:13.5px;font-weight:700;color:var(--green-text)">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}</div>
+            <div style="font-size:11.5px;color:var(--green-text);opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(c.total)}</div>
+          </div>
+          <button class="prod-btn-cut" onclick="cotSetEstado(${c.id},'cortada')">✂ Marcar cortada</button>
+        </div>`).join('')}
+    </div>`;
+  }
+
   if(!arr.length){el.innerHTML=html+'<div style="color:var(--text3);font-size:13px">Todavía no guardaste ninguna cotización.</div>';return;}
 
   const ESTADO_CFG={
     aceptada:{label:"✓ Aceptada",bg:"var(--green-bg)",color:"var(--green-text)"},
     rechazada:{label:"✗ Rechazada",bg:"var(--red-bg)",color:"var(--red-text)"},
-    pendiente:{label:"⏳ Pendiente",bg:"var(--amber-bg)",color:"var(--amber-text)"}
+    pendiente:{label:"⏳ Pendiente",bg:"var(--amber-bg)",color:"var(--amber-text)"},
+    cortada:{label:"✂ Cortada",bg:"#e8eaf6",color:"#3949ab"}
   };
 
+  html+=`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;padding-top:4px">Historial completo</div>`;
   html+=arr.map(c=>{
     const f=new Date(c.ts).toLocaleDateString("es-UY",{day:"2-digit",month:"2-digit",year:"2-digit"});
     const estado=c.estado||"pendiente";
@@ -2538,6 +2639,7 @@ function renderCotHist(){
       <select onchange="cotSetEstado(${c.id},this.value)" style="height:28px;padding:0 6px;border-radius:5px;font-size:12px;font-weight:600;border:1px solid ${ecfg.color};background:${ecfg.bg};color:${ecfg.color};cursor:pointer">
         <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
         <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
+        <option value="cortada" ${estado==="cortada"?"selected":""}>✂ Cortada</option>
         <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
       </select>
       <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
