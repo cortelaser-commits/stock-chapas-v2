@@ -890,6 +890,10 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
                   <input type="number" class="cot-mono" id="cot-largo" placeholder="Largo" oninput="cotCalc()">
                 </div>
                 <div id="cot-area-directa" style="display:none"><input type="number" class="cot-mono" id="cot-area" placeholder="m²" step="0.01" oninput="cotCalc()"></div>
+                <div style="margin-top:8px">
+                  <input type="text" id="cot-medida-cliente" placeholder="Medida final del cartel (ej: 800 × 400 mm)" style="font-size:13px">
+                  <div class="hint" style="margin-top:4px">⚠️ Si hay plegados, ingresá la medida <b>terminada</b> que ve el cliente. Esa es la que aparece en el presupuesto. Si lo dejás vacío se usa la medida de corte.</div>
+                </div>
               </div>
             </div>
             <div class="cot-stock"><span id="cot-stock-info" class="warn">—</span></div>
@@ -2497,7 +2501,7 @@ function cotSnapshot(){
     job:document.getElementById("cot-job").value||"Sin nombre",
     cant:r.cant, dolar:r.dolar, mat:r.mat, esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,
     precio:document.getElementById("cot-precio").value,
-    areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value,
+    areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value, medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),
     modo:cotModo, mm:document.getElementById("cot-mm").value, min:document.getElementById("cot-min").value,
     golpes:document.getElementById("cot-golpes").value,
     pintura:document.getElementById("cot-pintura").checked, oxid:document.getElementById("cot-oxid").checked, envio:document.getElementById("cot-envio").checked, embalaje:document.getElementById("cot-embalaje").checked, colocacion:document.getElementById("cot-colocacion").checked, colocacionMonto:document.getElementById("cot-colocacion-monto").value,
@@ -2828,6 +2832,7 @@ function cotReabrir(id){
   document.getElementById("cot-ancho").value=c.ancho||"";
   document.getElementById("cot-largo").value=c.largo||"";
   document.getElementById("cot-area").value=c.area||"";
+  document.getElementById("cot-medida-cliente").value=c.medidaCliente||"";
   cotSetModo(c.modo||"recorrido");
   document.getElementById("cot-mm").value=c.mm||"";
   document.getElementById("cot-min").value=c.min||"";
@@ -3067,9 +3072,12 @@ function cotImprimir(){
   const termPesos=(r.pintPesos+r.oxidPesos)*r.cant;
   const cartelTotal=r.total-termPesos;
   const cartelUnit=cartelTotal/r.cant;
-  // Medidas reales del cartel
+  // Medida que aparece en el PDF: usa la medida del cliente si está cargada, si no la de corte
+  const medidaClienteVal=document.getElementById("cot-medida-cliente").value.trim();
   let medida="";
-  if(cotAreaMode==="medida"){
+  if(medidaClienteVal){
+    medida=medidaClienteVal;
+  }else if(cotAreaMode==="medida"){
     const a=document.getElementById("cot-ancho").value, l=document.getElementById("cot-largo").value;
     if(a&&l)medida=a+" × "+l+" mm";
   }else{const ar=document.getElementById("cot-area").value;if(ar)medida=ar+" m²";}
@@ -3140,7 +3148,7 @@ function cotImprimir(){
 }
 
 function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;_pedidoActivoId=null;
-  ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil"].forEach(id=>document.getElementById(id).value="");
+  ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil","cot-medida-cliente"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById("cot-embalaje").checked=true;
