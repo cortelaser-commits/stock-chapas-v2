@@ -174,6 +174,43 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .pago-add button:hover{background:#283593}
 .btn-pagos{background:#e8eaf6;border:1px solid #9fa8da;color:#3949ab;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
 .btn-pagos:hover{background:#c5cae9}
+/* TERMINACIÓN */
+.term-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;white-space:nowrap;display:inline-block}
+.term-pintado{background:#e3f2fd;color:#1565c0}
+.term-oxidado{background:#fbe9e7;color:#bf360c}
+.term-sin{background:#f1f8e9;color:#33691e}
+.term-plegado{background:#f3e5f5;color:#6a1b9a}
+/* ESTADO LISTA */
+.btn-lista{background:#e0f2f1;border:1px solid #80cbc4;color:#00695c;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
+.btn-lista:hover{background:#b2dfdb}
+/* OT */
+.btn-ot{background:#fff3e0;border:1px solid #ffcc02;color:#e65100;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
+.btn-ot:hover{background:#ffe0b2}
+.ot-chk{width:16px;height:16px;cursor:pointer;accent-color:#e65100}
+/* ORDEN DE TRABAJO imprimible */
+@media print{
+  body>*{display:none!important}
+  #cot-orden-trabajo{display:block!important;position:static!important}
+}
+#cot-orden-trabajo{display:none;padding:0}
+.ot-wrap{font-family:Arial,sans-serif;color:#1a1917;max-width:800px;margin:0 auto;padding:20px}
+.ot-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1917;padding-bottom:12px;margin-bottom:18px}
+.ot-title{font-size:22px;font-weight:900;letter-spacing:.05em}
+.ot-subtitle{font-size:12px;color:#666;margin-top:2px}
+.ot-num{font-size:28px;font-weight:900;color:#1a1917;text-align:right}
+.ot-numlab{font-size:11px;color:#666;text-align:right}
+.ot-job{background:#f5f5f5;border-radius:6px;padding:12px 16px;margin-bottom:14px}
+.ot-job-name{font-size:18px;font-weight:800}
+.ot-job-sub{font-size:12px;color:#555;margin-top:3px}
+.ot-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.ot-box{border:1px solid #ddd;border-radius:6px;padding:10px 14px}
+.ot-box-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:4px}
+.ot-box-val{font-size:14px;font-weight:700}
+.ot-term-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ot-pago-row{font-size:13px;margin-top:4px}
+.ot-sep{border:none;border-top:2px dashed #ddd;margin:16px 0}
+.ot-footer{font-size:11px;color:#888;text-align:center;margin-top:20px;border-top:1px solid #ddd;padding-top:10px}
+.ot-obs{border:1px solid #ddd;border-radius:6px;padding:10px 14px;min-height:60px;margin-bottom:14px}
 /* AJUSTE DE PRECIO */
 .ajuste-panel{background:#fff8e1;border:1px solid #ffe082;border-radius:var(--radius);padding:12px 14px;margin:4px 0 8px}
 .btn-ajuste{background:#fff8e1;border:1px solid #ffe082;color:#e65100;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
@@ -2713,47 +2750,60 @@ function cotGuardar(silencioso){
   renderCotHist();
   if(!silencioso&&typeof showToast==="function")showToast("💾 Cotización guardada");
 }
+function _termInfo(c){
+  const t=[];
+  if(c.pintura)t.push('<span class="term-badge term-pintado">🎨 Pintado</span>');
+  if(c.oxid)t.push('<span class="term-badge term-oxidado">🔥 Oxidado</span>');
+  if(c.golpes>0)t.push('<span class="term-badge term-plegado">↕ '+c.golpes+' plegado'+(c.golpes>1?'s':'')+'</span>');
+  if(!c.pintura&&!c.oxid)t.push('<span class="term-badge term-sin">✓ Sin terminación</span>');
+  return t.join(' ');
+}
+
+let _otSel=new Set();
+
 function renderCotHist(){
   const el=document.getElementById("cot-hist-list");if(!el)return;
   const cnt=document.getElementById("cot-hist-count");
   const arr=(typeof cotizaciones!=="undefined"&&Array.isArray(cotizaciones))?cotizaciones:[];
   if(cnt)cnt.textContent=arr.length?arr.length+(arr.length==1?" guardada":" guardadas"):"";
 
-  // Panel de ventas
   const aceptadas=arr.filter(c=>c.estado==="aceptada");
   const pendientes=arr.filter(c=>!c.estado||c.estado==="pendiente");
   const rechazadas=arr.filter(c=>c.estado==="rechazada");
   const cortadas=arr.filter(c=>c.estado==="cortada");
-  const totalVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+_cotTotal(c),0);
-  const totalUSDVentas=[...aceptadas,...cortadas].reduce((s,c)=>s+(c.totalUSD||0),0);
+  const listas=arr.filter(c=>c.estado==="lista");
+  const activasParaCobro=[...aceptadas,...cortadas,...listas];
+  const totalVentas=activasParaCobro.reduce((s,c)=>s+_cotTotal(c),0);
+  const totalUSDVentas=activasParaCobro.reduce((s,c)=>s+(c.totalUSD||0),0);
   const totalPendiente=pendientes.reduce((s,c)=>s+c.total,0);
-  // Saldo total cobrado vs pendiente de cobro
-  const totalCobrado=[...aceptadas,...cortadas].reduce((s,c)=>s+_pagosTotales(c),0);
+  const totalCobrado=activasParaCobro.reduce((s,c)=>s+_pagosTotales(c),0);
   const totalSaldo=totalVentas-totalCobrado;
 
-  let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
-    <div style="background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:12px 14px">
-      <div style="font-size:11px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">Aceptadas</div>
-      <div style="font-size:20px;font-weight:800;color:var(--green-text);margin-top:4px">${aceptadas.length}</div>
-      <div style="font-size:12px;color:var(--green-text);margin-top:2px">${cotFmt(totalVentas)}</div>
-      <div style="font-size:11px;color:var(--green-text);opacity:.8">${cotFmtUSD(totalUSDVentas)}</div>
+  let html=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+    <div style="background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">Aceptadas</div>
+      <div style="font-size:22px;font-weight:800;color:var(--green-text);margin-top:3px">${aceptadas.length}</div>
+      <div style="font-size:11px;color:var(--green-text);margin-top:1px">${cotFmt(totalVentas)}</div>
     </div>
-    <div style="background:var(--amber-bg);border:1px solid #f0d89a;border-radius:var(--radius);padding:12px 14px">
-      <div style="font-size:11px;font-weight:700;color:var(--amber-text);text-transform:uppercase;letter-spacing:.05em">Pendientes</div>
-      <div style="font-size:20px;font-weight:800;color:var(--amber-text);margin-top:4px">${pendientes.length}</div>
-      <div style="font-size:12px;color:var(--amber-text);margin-top:2px">${cotFmt(totalPendiente)}</div>
+    <div style="background:var(--amber-bg);border:1px solid #f0d89a;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:var(--amber-text);text-transform:uppercase;letter-spacing:.05em">Pendientes</div>
+      <div style="font-size:22px;font-weight:800;color:var(--amber-text);margin-top:3px">${pendientes.length}</div>
+      <div style="font-size:11px;color:var(--amber-text);margin-top:1px">${cotFmt(totalPendiente)}</div>
     </div>
-    <div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:var(--radius);padding:12px 14px">
-      <div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em">✂ Cortadas</div>
-      <div style="font-size:20px;font-weight:800;color:#3949ab;margin-top:4px">${cortadas.length}</div>
+    <div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em">✂ Cortadas</div>
+      <div style="font-size:22px;font-weight:800;color:#3949ab;margin-top:3px">${cortadas.length}</div>
     </div>
-    <div style="background:var(--red-bg);border:1px solid #f0b6b6;border-radius:var(--radius);padding:12px 14px">
-      <div style="font-size:11px;font-weight:700;color:var(--red-text);text-transform:uppercase;letter-spacing:.05em">Rechazadas</div>
-      <div style="font-size:20px;font-weight:800;color:var(--red-text);margin-top:4px">${rechazadas.length}</div>
+    <div style="background:#e0f2f1;border:1px solid #80cbc4;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:#00695c;text-transform:uppercase;letter-spacing:.05em">✅ Listas</div>
+      <div style="font-size:22px;font-weight:800;color:#00695c;margin-top:3px">${listas.length}</div>
+    </div>
+    <div style="background:var(--red-bg);border:1px solid #f0b6b6;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:var(--red-text);text-transform:uppercase;letter-spacing:.05em">Rechazadas</div>
+      <div style="font-size:22px;font-weight:800;color:var(--red-text);margin-top:3px">${rechazadas.length}</div>
     </div>
   </div>`;
 
-  // Resumen cobros
   if(totalVentas>0){
     html+=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:#f4f6fb;border:1px solid #c5cae9;border-radius:var(--radius);font-size:13px">
       <span>💰 <b>Cobrado:</b> <span style="color:#2e7d32;font-weight:700">${cotFmt(totalCobrado)}</span></span>
@@ -2761,23 +2811,62 @@ function renderCotHist(){
     </div>`;
   }
 
-  // Sección "Para cortar"
+  // Sección "Para cortar" (aceptadas)
   if(aceptadas.length){
     html+=`<div style="margin-bottom:18px">
-      <div style="font-size:12px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">✂ Para cortar (${aceptadas.length})</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">✂ Para cortar (${aceptadas.length})</span>
+        <button class="btn-ot" onclick="generarOTGrupal()" title="Generar Orden de Trabajo para todos los trabajos seleccionados">📋 OT Grupal</button>
+        <span style="font-size:11px;color:var(--text3)">← seleccioná trabajos con el ✓ para agrupar en una OT</span>
+      </div>
       ${aceptadas.map(c=>{
         const pagado=_pagosTotales(c);
-        const saldo=c.total-pagado;
-        const pagoBadge=pagado>0?(saldo<=0?'<span style="font-size:11px;font-weight:700;background:#c8e6c9;color:#1b5e20;padding:2px 8px;border-radius:20px;margin-left:8px">✅ Pagado</span>':`<span style="font-size:11px;font-weight:700;background:#fff9c4;color:#f57f17;padding:2px 8px;border-radius:20px;margin-left:8px">Seña ${cotFmt(pagado)} · Saldo ${cotFmt(saldo)}</span>`):'';
+        const saldo=_cotTotal(c)-pagado;
+        const pagoBadge=pagado>0?(saldo<=0?'<span style="font-size:11px;font-weight:700;background:#c8e6c9;color:#1b5e20;padding:2px 8px;border-radius:20px">✅ Pagado</span>':`<span style="font-size:11px;font-weight:700;background:#fff9c4;color:#f57f17;padding:2px 8px;border-radius:20px">Seña ${cotFmt(pagado)} · Saldo ${cotFmt(saldo)}</span>`):'';
         const totalReal=_cotTotal(c);
-        return `<div class="prod-card">
-          <div style="flex:1">
-            <div style="font-size:13.5px;font-weight:700;color:var(--green-text);display:flex;align-items:center;flex-wrap:wrap;gap:4px">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}${pagoBadge}</div>
-            <div style="font-size:11.5px;color:var(--green-text);opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(totalReal)}${c.ajuste?` <span class="ajuste-badge">+ajuste</span>`:""}</div>
+        return `<div class="prod-card" style="flex-wrap:wrap;gap:8px">
+          <input type="checkbox" class="ot-chk" title="Incluir en OT grupal" onchange="cotOTToggle(${c.id},this.checked)" ${_otSel.has(c.id)?"checked":""}>
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:13.5px;font-weight:700;color:var(--green-text)">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}</div>
+            <div style="font-size:11.5px;color:var(--green-text);margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+              ${_termInfo(c)}
+            </div>
+            <div style="font-size:11.5px;color:var(--green-text);opacity:.7;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:'')+(c.medidaCliente?' · '+c.medidaCliente:(c.ancho&&c.largo?' · '+c.ancho+'×'+c.largo+' mm':'')))} · ${cotFmt(totalReal)} ${pagoBadge}</div>
           </div>
-          <button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})" style="margin-right:4px">✏️ Ajuste</button>
-          <button class="btn-pagos" onclick="cotTogglePagos(${c.id})" style="margin-right:6px">💳 Pagos</button>
-          <button class="prod-btn-cut" onclick="cotSetEstado(${c.id},'cortada')">✂ Marcar cortada</button>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <button class="btn-ot" onclick="generarOT([${c.id}])">📋 OT</button>
+            <button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️ Ajuste</button>
+            <button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>
+            <button class="prod-btn-cut" onclick="cotSetEstado(${c.id},'cortada')">✂ Marcar cortada</button>
+          </div>
+        </div>
+        <div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>
+        <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // Sección "Cortadas — en terminación"
+  if(cortadas.length){
+    html+=`<div style="margin-bottom:18px">
+      <div style="font-size:12px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">✂ Cortadas — en terminación (${cortadas.length})</div>
+      ${cortadas.map(c=>{
+        const pagado=_pagosTotales(c);
+        const saldo=_cotTotal(c)-pagado;
+        const totalReal=_cotTotal(c);
+        return `<div class="prod-card" style="background:#eef0fb;border-color:#9fa8da;flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:13.5px;font-weight:700;color:#3949ab">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}</div>
+            <div style="font-size:11.5px;color:#3949ab;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+              ${_termInfo(c)}
+            </div>
+            <div style="font-size:11.5px;color:#3949ab;opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(totalReal)} ${saldo>0?'· <b>Saldo '+cotFmt(saldo)+'</b>':''}</div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <button class="btn-ot" onclick="generarOT([${c.id}])">📋 OT</button>
+            <button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>
+            <button class="btn-lista" onclick="cotSetEstado(${c.id},'lista')">✅ Marcar lista</button>
+          </div>
         </div>
         <div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>
         <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
@@ -2791,7 +2880,8 @@ function renderCotHist(){
     aceptada:{label:"✓ Aceptada",bg:"var(--green-bg)",color:"var(--green-text)"},
     rechazada:{label:"✗ Rechazada",bg:"var(--red-bg)",color:"var(--red-text)"},
     pendiente:{label:"⏳ Pendiente",bg:"var(--amber-bg)",color:"var(--amber-text)"},
-    cortada:{label:"✂ Cortada",bg:"#e8eaf6",color:"#3949ab"}
+    cortada:{label:"✂ Cortada",bg:"#e8eaf6",color:"#3949ab"},
+    lista:{label:"✅ Lista",bg:"#e0f2f1",color:"#00695c"}
   };
 
   html+=`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;padding-top:4px">Historial completo</div>`;
@@ -2800,7 +2890,7 @@ function renderCotHist(){
     const estado=c.estado||"pendiente";
     const ecfg=ESTADO_CFG[estado]||ESTADO_CFG.pendiente;
     const matInfo=c.soloCorte?"Solo corte":(c.mat+(c.esp?" · "+c.esp:""));
-    const conPagos=(estado==="aceptada"||estado==="cortada");
+    const conPagos=(estado==="aceptada"||estado==="cortada"||estado==="lista");
     const totalReal=conPagos?_cotTotal(c):c.total;
     const pagado=conPagos?_pagosTotales(c):0;
     const saldo=totalReal-pagado;
@@ -2817,8 +2907,10 @@ function renderCotHist(){
           <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
           <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
           <option value="cortada" ${estado==="cortada"?"selected":""}>✂ Cortada</option>
+          <option value="lista" ${estado==="lista"?"selected":""}>✅ Lista</option>
           <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
         </select>
+        ${conPagos?`<button class="btn-ot" onclick="generarOT([${c.id}])" title="Orden de Trabajo">📋 OT</button>`:""}
         ${conPagos?`<button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️ Ajuste</button>`:""}
         ${conPagos?`<button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>`:""}
         <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
@@ -2958,6 +3050,72 @@ function cotBorrarPago(cotId,pagoId){
 }
 
 let _cotizacionActivaId=null; // ID de la cotización guardada que está abierta en el form
+
+// ---- Orden de Trabajo ----
+function cotOTToggle(id,checked){
+  if(checked)_otSel.add(id); else _otSel.delete(id);
+}
+function generarOTGrupal(){
+  const ids=[..._otSel];
+  if(!ids.length){showToast("⚠️ Seleccioná al menos un trabajo con el ✓");return;}
+  generarOT(ids);
+}
+function generarOT(ids){
+  const cots=ids.map(id=>cotizaciones.find(x=>x.id===id)).filter(Boolean);
+  if(!cots.length){showToast("⚠️ No se encontraron las cotizaciones");return;}
+  const fecha=new Date().toLocaleDateString("es-UY",{day:"2-digit",month:"long",year:"numeric"});
+  let html='<div class="ot-wrap">';
+  // Header
+  html+='<div class="ot-header">';
+  html+='<div><div class="ot-title">ORDEN DE TRABAJO</div><div class="ot-subtitle">Fischer Cutting · Corte láser y trabajos en chapa</div><div class="ot-subtitle">'+fecha+'</div></div>';
+  if(cots.length===1){html+='<div><div class="ot-numlab">N° DE ORDEN</div><div class="ot-num">'+String(cots[0].num).padStart(4,'0')+'</div></div>';}
+  else{html+='<div><div class="ot-numlab">TRABAJOS</div><div class="ot-num">'+cots.length+'</div></div>';}
+  html+='</div>';
+  // Cada cotización
+  cots.forEach((c,i)=>{
+    if(i>0)html+='<hr class="ot-sep">';
+    const totalReal=_cotTotal(c);
+    const pagado=_pagosTotales(c);
+    const saldo=totalReal-pagado;
+    const medDisplay=c.medidaCliente||(c.ancho&&c.largo?(c.ancho+'×'+c.largo+' mm'):(c.area?(c.area+' m²'):'—'));
+    const termParts=[];
+    if(c.pintura)termParts.push('🎨 Pintado');
+    if(c.oxid)termParts.push('🔥 Oxidado');
+    if(c.golpes>0)termParts.push('↕ Plegado ('+c.golpes+' golpe'+(c.golpes>1?'s':'')+')')
+    if(!c.pintura&&!c.oxid)termParts.push('✓ Sin terminación');
+    html+='<div class="ot-job">';
+    html+='<div class="ot-job-name">'+(c.job||'Sin nombre')+'</div>';
+    html+='<div class="ot-job-sub">Presupuesto N° '+String(c.num).padStart(4,'0')+'</div>';
+    html+='</div>';
+    html+='<div class="ot-grid">';
+    html+='<div class="ot-box"><div class="ot-box-label">Material</div><div class="ot-box-val">'+(c.soloCorte?'Solo corte':((c.mat||'')+(c.esp?' · '+c.esp+'mm':'')))+' · '+c.cant+' '+(c.cant===1?'unidad':'unidades')+'</div></div>';
+    html+='<div class="ot-box"><div class="ot-box-label">Medida del cartel</div><div class="ot-box-val">'+medDisplay+'</div></div>';
+    html+='<div class="ot-box" style="grid-column:1/-1"><div class="ot-box-label">Terminación</div><div class="ot-term-row">'+termParts.map(t=>'<span style="background:#f5f5f5;border:1px solid #ddd;border-radius:20px;padding:3px 10px;font-size:13px;font-weight:700">'+t+'</span>').join('')+'</div></div>';
+    html+='</div>';
+    html+='<div class="ot-grid">';
+    html+='<div class="ot-box"><div class="ot-box-label">Precio total</div><div class="ot-box-val">'+cotFmt(totalReal)+(c.ajuste?'<span style="font-size:11px;color:#e65100;font-weight:600;margin-left:6px">(incl. ajuste)</span>':'')+'</div>';
+    if(pagado>0)html+='<div class="ot-pago-row">Cobrado: <b style="color:#2e7d32">'+cotFmt(pagado)+'</b></div>';
+    if(saldo>0)html+='<div class="ot-pago-row">Saldo pendiente: <b style="color:#c62828">'+cotFmt(saldo)+'</b></div>';
+    if(saldo<=0&&pagado>0)html+='<div class="ot-pago-row" style="color:#2e7d32;font-weight:700">✅ Cobrado completo</div>';
+    html+='</div>';
+    html+='<div class="ot-box"><div class="ot-box-label">Plazo de entrega</div><div class="ot-box-val">'+(c.plazo||'A coordinar')+'</div>';
+    if(c.pago)html+='<div class="ot-pago-row">Forma de pago: '+(c.pago||'').replace(/\n/g,', ')+'</div>';
+    html+='</div>';
+    html+='</div>';
+    if(c.ajuste)html+='<div class="ot-box" style="margin-bottom:14px"><div class="ot-box-label">Ajuste de precio</div><div style="font-size:13px"><b>'+(c.ajuste.monto>=0?'+':'')+cotFmt(c.ajuste.monto)+'</b> — '+c.ajuste.detalle+'</div></div>';
+    html+='<div class="ot-obs"><div class="ot-box-label">Observaciones / Notas de taller</div></div>';
+  });
+  html+='<div class="ot-footer">Fischer Cutting · Corte láser · Trabajos en chapa</div>';
+  html+='</div>';
+  const el=document.getElementById("cot-orden-trabajo");
+  el.innerHTML=html;
+  const tituloOrig=document.title;
+  if(cots.length===1){document.title="OT-"+String(cots[0].num).padStart(4,'0')+" - "+(cots[0].job||"orden");}
+  else{document.title="OT-Grupal-"+cots.map(c=>String(c.num).padStart(4,'0')).join("-");}
+  window.addEventListener("afterprint",function r(){document.title=tituloOrig;window.removeEventListener("afterprint",r);},{once:true});
+  setTimeout(()=>{if(document.title!==tituloOrig)document.title=tituloOrig;},5000);
+  window.print();
+}
 
 function cotReabrir(id){
   const c=cotizaciones.find(x=>x.id===id);if(!c)return;
@@ -3465,6 +3623,7 @@ if('serviceWorker' in navigator){
 }
 </script>
 <div id="cot-presupuesto"></div>
+<div id="cot-orden-trabajo"></div>
 <!-- ===== MODAL MEDIR RECORRIDO DESDE IMAGEN ===== -->
 <div class="modal-overlay" id="modal-medir">
   <div class="modal" style="max-width:620px;max-height:92vh;overflow-y:auto">
