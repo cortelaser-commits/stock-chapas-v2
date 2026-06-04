@@ -2835,11 +2835,13 @@ function renderCotHist(){
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             <button class="btn-ot" onclick="generarOT([${c.id}])">📋 OT</button>
+            <button class="btn-ajuste" onclick="cotToggleTerm(${c.id})" title="Editar terminación">🔧 Term.</button>
             <button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️ Ajuste</button>
             <button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>
             <button class="prod-btn-cut" onclick="cotSetEstado(${c.id},'cortada')">✂ Marcar cortada</button>
           </div>
         </div>
+        <div id="cot-term-${c.id}" class="ajuste-panel" style="display:${_termPanelAbiertos.has(c.id)?'block':'none'}">${_renderTermPanel(c)}</div>
         <div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>
         <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
       }).join('')}
@@ -2864,10 +2866,12 @@ function renderCotHist(){
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             <button class="btn-ot" onclick="generarOT([${c.id}])">📋 OT</button>
+            <button class="btn-ajuste" onclick="cotToggleTerm(${c.id})" title="Editar terminación">🔧 Term.</button>
             <button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>
             <button class="btn-lista" onclick="cotSetEstado(${c.id},'lista')">✅ Marcar lista</button>
           </div>
         </div>
+        <div id="cot-term-${c.id}" class="ajuste-panel" style="display:${_termPanelAbiertos.has(c.id)?'block':'none'}">${_renderTermPanel(c)}</div>
         <div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>
         <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
       }).join('')}
@@ -2928,8 +2932,44 @@ function _cotTotal(c){return(c.totalConDesc||c.total||0)+(c.ajuste?.monto||0);}
 // ---- Pagos de cotizaciones ----
 let _pagosPanelAbiertos=new Set();
 let _ajustePanelAbiertos=new Set();
+let _termPanelAbiertos=new Set();
 
 function _pagosTotales(c){return(c.pagos||[]).reduce((s,p)=>s+(p.monto||0),0);}
+
+// ---- Terminación editable ----
+function cotToggleTerm(id){
+  if(_termPanelAbiertos.has(id))_termPanelAbiertos.delete(id);
+  else _termPanelAbiertos.add(id);
+  const el=document.getElementById("cot-term-"+id);
+  if(el)el.style.display=_termPanelAbiertos.has(id)?"block":"none";
+}
+function _renderTermPanel(c){
+  return `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer">
+      <input type="checkbox" id="tp-pint-${c.id}" ${c.pintura?"checked":""} style="width:16px;height:16px;accent-color:#1565c0">
+      🎨 Pintado
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer">
+      <input type="checkbox" id="tp-oxid-${c.id}" ${c.oxid?"checked":""} style="width:16px;height:16px;accent-color:#bf360c">
+      🔥 Oxidado
+    </label>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:13px;font-weight:600">↕ Plegados:</span>
+      <input type="number" id="tp-golp-${c.id}" value="${c.golpes||0}" min="0" style="height:30px;width:60px;padding:0 8px;border:1px solid #ffe082;border-radius:var(--radius);font:inherit;font-size:13px;background:#fff">
+    </div>
+    <button onclick="cotGuardarTerm(${c.id})" style="height:30px;padding:0 14px;background:#e65100;color:#fff;border:none;border-radius:var(--radius);font:inherit;font-size:13px;font-weight:700;cursor:pointer">Guardar</button>
+  </div>`;
+}
+function cotGuardarTerm(cotId){
+  const c=cotizaciones.find(x=>x.id===cotId);if(!c)return;
+  c.pintura=document.getElementById("tp-pint-"+cotId).checked;
+  c.oxid=document.getElementById("tp-oxid-"+cotId).checked;
+  c.golpes=parseInt(document.getElementById("tp-golp-"+cotId).value)||0;
+  _lastSavedHash=null;
+  guardarEnServidor(true);
+  renderCotHist();
+  showToast("✅ Terminación actualizada");
+}
 
 function _formaLabel(f){return f==="efectivo"?"Efectivo":f==="mercadopago"?"Mercado Pago":"Transferencia";}
 function _formaClass(f){return f==="efectivo"?"ef":f==="mercadopago"?"mp":"";}
