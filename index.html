@@ -1339,6 +1339,7 @@ async function _doSave(){
     const r=await fetch(API+"/stock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items,nextId,historial,laserItems,laserNextId,cotizaciones,cotNextNum,pedidos:pedidos||[],agotados:window.agotados||[],ts:Date.now()}),signal:AbortSignal.timeout(FETCH_TIMEOUT_MS)});
     if(!r.ok)throw new Error();
     _lastSavedHash=_dataHash();
+    _cotizacionesCargadas=Math.max(_cotizacionesCargadas,cotizaciones.length); // actualizar mínimo conocido
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
     _guardarBackupLocal();
   }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
@@ -1355,7 +1356,23 @@ setInterval(async()=>{
     if(meta&&meta.ts&&meta.ts>(window._lastTs||0)){
       const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
       const data=await r.json();
-      if(data&&data.ts){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;if(data.pedidos)pedidos=data.pedidos;window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();if(_vista==='grupo')renderGrupo();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();}
+      if(data&&data.ts){
+        items=data.items;nextId=data.nextId||100;historial=data.historial||[];
+        if(data.laserItems)laserItems=data.laserItems;
+        if(data.laserNextId)laserNextId=data.laserNextId;
+        if(data.cotNextNum)cotNextNum=data.cotNextNum;
+        if(data.pedidos)pedidos=data.pedidos;
+        // GUARD: nunca sobreescribir cotizaciones si el servidor trae menos de las esperadas
+        if(Array.isArray(data.cotizaciones)){
+          if(data.cotizaciones.length>=cotizaciones.length||cotizaciones.length===0){
+            cotizaciones=data.cotizaciones;
+            _cotizacionesCargadas=Math.max(_cotizacionesCargadas,cotizaciones.length);
+          } else {
+            console.warn('Sync bloqueado: servidor trajo',data.cotizaciones.length,'cotizaciones pero tenemos',cotizaciones.length,'— ignorando');
+          }
+        }
+        window._lastTs=data.ts;_lastSavedHash=_dataHash();actualizarFecha(data.ts);_invalidarCacheTexto();render();if(_vista==='grupo')renderGrupo();renderHistorial();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();
+      }
     }
   }catch(e){}finally{_sincronizando=false;}
 },SYNC_INTERVAL_MS);
