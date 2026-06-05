@@ -2699,7 +2699,7 @@ function cotSnapshot(){
     total:r.total, totalConDesc:r.totalConDesc, descPct:r.descPct, totalUSD:r.totalUSD,
     estado:"pendiente",
     // Si hay carrito, incluir todas las piezas y recalcular el total
-    piezas: cotCarrito.length>0 ? [...cotCarrito.map((p,i)=>({...p,r:undefined,nombre:p.nombre||'Pieza '+(i+1)})), {nombre:'Pieza '+(cotCarrito.length+1), mat:r.mat,esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,cant:r.cant,ancho:document.getElementById("cot-ancho").value,largo:document.getElementById("cot-largo").value,medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),golpes:r.golpes,pintura:r.pintOn,oxid:r.oxidOn,soloCorte:document.getElementById("cot-solo-corte").checked,total:r.totalConDesc}] ] : null,
+    piezas: cotCarrito.length>0 ? [...cotCarrito.map((p,i)=>({...p,r:undefined,nombre:p.nombre||'Pieza '+(i+1)})), {nombre:'Pieza '+(cotCarrito.length+1), mat:r.mat,esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,cant:r.cant,ancho:document.getElementById("cot-ancho").value,largo:document.getElementById("cot-largo").value,medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),golpes:r.golpes,pintura:r.pintOn,oxid:r.oxidOn,soloCorte:document.getElementById("cot-solo-corte").checked,total:r.totalConDesc}] : null,
     totalCarrito: cotCarrito.length>0 ? cotCarrito.reduce((s,p)=>s+p.total,0)+r.totalConDesc : null,
   };
 }
