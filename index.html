@@ -2761,6 +2761,8 @@ function _termInfo(c){
 
 let _otSel=new Set();
 
+function _necesitaTerminacion(c){return !!(c.pintura||c.oxid);}
+
 function renderCotHist(){
   const el=document.getElementById("cot-hist-list");if(!el)return;
   const cnt=document.getElementById("cot-hist-count");
@@ -2771,8 +2773,11 @@ function renderCotHist(){
   const pendientes=arr.filter(c=>!c.estado||c.estado==="pendiente");
   const rechazadas=arr.filter(c=>c.estado==="rechazada");
   const cortadas=arr.filter(c=>c.estado==="cortada");
+  const enTerminacion=cortadas.filter(c=>_necesitaTerminacion(c));
+  const terminadas=arr.filter(c=>c.estado==="terminada");
+  const paraCobroArr=[...cortadas.filter(c=>!_necesitaTerminacion(c)),...terminadas];
   const listas=arr.filter(c=>c.estado==="lista");
-  const activasParaCobro=[...aceptadas,...cortadas,...listas];
+  const activasParaCobro=[...aceptadas,...cortadas,...terminadas,...listas];
   const totalVentas=activasParaCobro.reduce((s,c)=>s+_cotTotal(c),0);
   const totalUSDVentas=activasParaCobro.reduce((s,c)=>s+(c.totalUSD||0),0);
   const totalPendiente=pendientes.reduce((s,c)=>s+c.total,0);
@@ -2781,26 +2786,27 @@ function renderCotHist(){
 
   let html=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
     <div style="background:var(--green-bg);border:1px solid #b6d9b6;border-radius:var(--radius);padding:10px 12px">
-      <div style="font-size:10px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">Aceptadas</div>
+      <div style="font-size:10px;font-weight:700;color:var(--green-text);text-transform:uppercase;letter-spacing:.05em">Para cortar</div>
       <div style="font-size:22px;font-weight:800;color:var(--green-text);margin-top:3px">${aceptadas.length}</div>
       <div style="font-size:11px;color:var(--green-text);margin-top:1px">${cotFmt(totalVentas)}</div>
+    </div>
+    <div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em">En terminación</div>
+      <div style="font-size:22px;font-weight:800;color:#3949ab;margin-top:3px">${enTerminacion.length}</div>
+    </div>
+    <div style="background:#fff3e0;border:1px solid #ffcc02;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.05em">📦 Para cobrar</div>
+      <div style="font-size:22px;font-weight:800;color:#e65100;margin-top:3px">${paraCobroArr.length}</div>
+      <div style="font-size:11px;color:#e65100;margin-top:1px">${cotFmt(paraCobroArr.reduce((s,c)=>s+(_cotTotal(c)-_pagosTotales(c)),0))}</div>
+    </div>
+    <div style="background:#e0f2f1;border:1px solid #80cbc4;border-radius:var(--radius);padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:#00695c;text-transform:uppercase;letter-spacing:.05em">✅ Entregadas</div>
+      <div style="font-size:22px;font-weight:800;color:#00695c;margin-top:3px">${listas.length}</div>
     </div>
     <div style="background:var(--amber-bg);border:1px solid #f0d89a;border-radius:var(--radius);padding:10px 12px">
       <div style="font-size:10px;font-weight:700;color:var(--amber-text);text-transform:uppercase;letter-spacing:.05em">Pendientes</div>
       <div style="font-size:22px;font-weight:800;color:var(--amber-text);margin-top:3px">${pendientes.length}</div>
       <div style="font-size:11px;color:var(--amber-text);margin-top:1px">${cotFmt(totalPendiente)}</div>
-    </div>
-    <div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:var(--radius);padding:10px 12px">
-      <div style="font-size:10px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em">✂ Cortadas</div>
-      <div style="font-size:22px;font-weight:800;color:#3949ab;margin-top:3px">${cortadas.length}</div>
-    </div>
-    <div style="background:#e0f2f1;border:1px solid #80cbc4;border-radius:var(--radius);padding:10px 12px">
-      <div style="font-size:10px;font-weight:700;color:#00695c;text-transform:uppercase;letter-spacing:.05em">✅ Listas</div>
-      <div style="font-size:22px;font-weight:800;color:#00695c;margin-top:3px">${listas.length}</div>
-    </div>
-    <div style="background:var(--red-bg);border:1px solid #f0b6b6;border-radius:var(--radius);padding:10px 12px">
-      <div style="font-size:10px;font-weight:700;color:var(--red-text);text-transform:uppercase;letter-spacing:.05em">Rechazadas</div>
-      <div style="font-size:22px;font-weight:800;color:var(--red-text);margin-top:3px">${rechazadas.length}</div>
     </div>
   </div>`;
 
@@ -2848,31 +2854,53 @@ function renderCotHist(){
     </div>`;
   }
 
-  // Sección "Cortadas — en terminación"
-  if(cortadas.length){
+  // Sección "En terminación" (cortadas con pintura/oxidado)
+  if(enTerminacion.length){
     html+=`<div style="margin-bottom:18px">
-      <div style="font-size:12px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">✂ Cortadas — en terminación (${cortadas.length})</div>
-      ${cortadas.map(c=>{
-        const pagado=_pagosTotales(c);
-        const saldo=_cotTotal(c)-pagado;
-        const totalReal=_cotTotal(c);
+      <div style="font-size:12px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🎨 En terminación (${enTerminacion.length})</div>
+      ${enTerminacion.map(c=>{
+        const saldo=_cotTotal(c)-_pagosTotales(c);
         return `<div class="prod-card" style="background:#eef0fb;border-color:#9fa8da;flex-wrap:wrap;gap:8px">
           <div style="flex:1;min-width:200px">
             <div style="font-size:13.5px;font-weight:700;color:#3949ab">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}</div>
-            <div style="font-size:11.5px;color:#3949ab;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
-              ${_termInfo(c)}
-            </div>
-            <div style="font-size:11.5px;color:#3949ab;opacity:.8;margin-top:2px">${c.soloCorte?"Solo corte":((c.mat||'')+(c.esp?' · '+c.esp:''))} · ${cotFmt(totalReal)} ${saldo>0?'· <b>Saldo '+cotFmt(saldo)+'</b>':''}</div>
+            <div style="font-size:11.5px;color:#3949ab;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap">${_termInfo(c)}</div>
+            <div style="font-size:11.5px;color:#3949ab;opacity:.8;margin-top:2px">${(c.mat||'')+(c.esp?' · '+c.esp:'')} · ${cotFmt(_cotTotal(c))}${saldo>0?' · Saldo '+cotFmt(saldo):' · ✅ Cobrado'}</div>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
             <button class="btn-ot" onclick="generarOT([${c.id}])">📋 OT</button>
-            <button class="btn-ajuste" onclick="cotToggleTerm(${c.id})" title="Editar terminación">🔧 Term.</button>
+            <button class="btn-ajuste" onclick="cotToggleTerm(${c.id})">🔧 Term.</button>
             <button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>
-            <button class="btn-lista" onclick="cotSetEstado(${c.id},'lista')">✅ Marcar lista</button>
+            <button class="btn-lista" style="background:#e8eaf6;border-color:#9fa8da;color:#3949ab" onclick="cotSetEstado(${c.id},'terminada')">✅ Terminado — pasar a cobro</button>
           </div>
         </div>
         <div id="cot-term-${c.id}" class="ajuste-panel" style="display:${_termPanelAbiertos.has(c.id)?'block':'none'}">${_renderTermPanel(c)}</div>
-        <div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>
+        <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // Sección "Para cobrar y embalar" (cortadas sin terminación + terminadas)
+  if(paraCobroArr.length){
+    html+=`<div style="margin-bottom:18px">
+      <div style="font-size:12px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📦 Para cobrar y embalar (${paraCobroArr.length})</div>
+      ${paraCobroArr.map(c=>{
+        const pagado=_pagosTotales(c);
+        const saldo=_cotTotal(c)-pagado;
+        const totalReal=_cotTotal(c);
+        const estaTerminada=c.estado==="terminada";
+        return `<div class="prod-card" style="background:#fff8f0;border-color:#ffcc02;flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:13.5px;font-weight:700;color:#e65100">Nro. ${String(c.num).padStart(4,'0')} — ${c.job||"Sin nombre"}</div>
+            <div style="font-size:11.5px;color:#e65100;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap">${_termInfo(c)}</div>
+            <div style="font-size:13px;font-weight:700;color:${saldo>0?"#c62828":"#2e7d32"};margin-top:4px">${saldo>0?'💰 Saldo pendiente: '+cotFmt(saldo)+'':'✅ Cobrado completo — listo para entregar'}</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">${(c.plazo?'📅 '+c.plazo:'')}</div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <button class="btn-ot" onclick="generarOT([${c.id}])">📋 OT</button>
+            <button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>
+            <button class="btn-lista" onclick="cotSetEstado(${c.id},'lista')">🚀 Marcar entregada</button>
+          </div>
+        </div>
         <div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`;
       }).join('')}
     </div>`;
@@ -2885,7 +2913,8 @@ function renderCotHist(){
     rechazada:{label:"✗ Rechazada",bg:"var(--red-bg)",color:"var(--red-text)"},
     pendiente:{label:"⏳ Pendiente",bg:"var(--amber-bg)",color:"var(--amber-text)"},
     cortada:{label:"✂ Cortada",bg:"#e8eaf6",color:"#3949ab"},
-    lista:{label:"✅ Lista",bg:"#e0f2f1",color:"#00695c"}
+    terminada:{label:"🎨 Terminada",bg:"#fff3e0",color:"#e65100"},
+    lista:{label:"🚀 Entregada",bg:"#e0f2f1",color:"#00695c"}
   };
 
   html+=`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;padding-top:4px">Historial completo</div>`;
@@ -2894,7 +2923,7 @@ function renderCotHist(){
     const estado=c.estado||"pendiente";
     const ecfg=ESTADO_CFG[estado]||ESTADO_CFG.pendiente;
     const matInfo=c.soloCorte?"Solo corte":(c.mat+(c.esp?" · "+c.esp:""));
-    const conPagos=(estado==="aceptada"||estado==="cortada"||estado==="lista");
+    const conPagos=(estado==="aceptada"||estado==="cortada"||estado==="terminada"||estado==="lista");
     const totalReal=conPagos?_cotTotal(c):c.total;
     const pagado=conPagos?_pagosTotales(c):0;
     const saldo=totalReal-pagado;
@@ -2911,15 +2940,18 @@ function renderCotHist(){
           <option value="pendiente" ${estado==="pendiente"?"selected":""}>⏳ Pendiente</option>
           <option value="aceptada" ${estado==="aceptada"?"selected":""}>✓ Aceptada</option>
           <option value="cortada" ${estado==="cortada"?"selected":""}>✂ Cortada</option>
-          <option value="lista" ${estado==="lista"?"selected":""}>✅ Lista</option>
+          <option value="terminada" ${estado==="terminada"?"selected":""}>🎨 Terminada</option>
+          <option value="lista" ${estado==="lista"?"selected":""}>🚀 Entregada</option>
           <option value="rechazada" ${estado==="rechazada"?"selected":""}>✗ Rechazada</option>
         </select>
         ${conPagos?`<button class="btn-ot" onclick="generarOT([${c.id}])" title="Orden de Trabajo">📋 OT</button>`:""}
-        ${conPagos?`<button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️ Ajuste</button>`:""}
-        ${conPagos?`<button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳 Pagos</button>`:""}
+        ${conPagos?`<button class="btn-ajuste" onclick="cotToggleTerm(${c.id})" title="Editar terminación">🔧</button>`:""}
+        ${conPagos?`<button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️</button>`:""}
+        ${conPagos?`<button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳</button>`:""}
         <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
         <button class="cot-hist-del" onclick="cotBorrarHist(${c.id})">🗑</button>
       </div>
+      ${conPagos?`<div id="cot-term-${c.id}" class="ajuste-panel" style="display:${_termPanelAbiertos.has(c.id)?'block':'none'}">${_renderTermPanel(c)}</div>`:""}
       ${conPagos?`<div id="cot-ajuste-${c.id}" class="ajuste-panel" style="display:${_ajustePanelAbiertos.has(c.id)?'block':'none'}">${_renderAjustePanel(c)}</div>`:""}
       ${conPagos?`<div id="cot-pagos-${c.id}" class="pago-panel" style="display:${_pagosPanelAbiertos.has(c.id)?'block':'none'}">${_renderPagoPanel(c)}</div>`:""}
     </div>`;
@@ -3432,6 +3464,7 @@ function cotImprimir(){
   if(medida&&!soloCorte)detalle+="<li><b>Medida:</b> "+medida+"</li>";
   detalle+="<li><b>Cantidad:</b> "+r.cant+" "+(r.cant==1?"cartel":"carteles")+"</li>";
   if(r.golpes>0)detalle+="<li><b>Plegado:</b> "+r.golpes+" "+(r.golpes==1?"golpe":"golpes")+"</li>";
+  r.opList.forEach(o=>{if(o.nombre&&o.monto===0)detalle+="<li><b>"+o.nombre+"</b></li>";});
 
   let preciosRows="";
   const partesIncluye=soloCorte?["corte","diseño"]:["material","corte","diseño"];
@@ -3445,6 +3478,12 @@ function cotImprimir(){
   preciosRows+=lineaCartel;
   if(r.pintOn){const t=r.pintPesos*r.cant;preciosRows+='<tr><td>Pintura<br><small>terminación del cartel</small></td><td class="r">'+cotFmt(t)+'</td></tr>';}
   if(r.oxidOn){const t=r.oxidPesos*r.cant;preciosRows+='<tr><td>Proceso de oxidación<br><small>terminación del cartel</small></td><td class="r">'+cotFmt(t)+'</td></tr>';}
+  // Operaciones extra: con precio y también texto-only (incluido en precio)
+  r.opList.forEach(o=>{
+    if(!o.nombre&&!o.monto)return;
+    if(o.monto>0){preciosRows+='<tr><td>'+(o.nombre||"Extra")+'<br><small>'+(o.porUnidad?"por unidad":"monto único")+'</small></td><td class="r">'+cotFmt(o.monto)+'</td></tr>';}
+    else if(o.nombre){preciosRows+='<tr><td>'+o.nombre+'<br><small>incluido en el precio</small></td><td class="r" style="color:#666;font-style:italic">Incluido</td></tr>';}
+  });
   // Si la cotización tiene ajuste, agregarlo como línea separada
   const cotActiva=_cotizacionActivaId?cotizaciones.find(x=>x.id===_cotizacionActivaId):null;
   if(cotActiva?.ajuste){
