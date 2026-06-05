@@ -216,6 +216,18 @@ details.cot-tar[open] summary .cv{transform:rotate(180deg)}
 .btn-ajuste{background:#fff8e1;border:1px solid #ffe082;color:#e65100;font:inherit;font-size:12px;font-weight:700;padding:5px 11px;border-radius:var(--radius);cursor:pointer;white-space:nowrap}
 .btn-ajuste:hover{background:#ffecb3}
 .ajuste-badge{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;background:#fff9c4;color:#e65100;white-space:nowrap}
+/* CARRITO MULTI-ÍTEM */
+.carrito-card{background:var(--surface);border:2px solid #3949ab;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.carrito-header{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#e8eaf6;border-bottom:1px solid #c5cae9}
+.carrito-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e8eaf6;font-size:13px}
+.carrito-row:last-child{border:none}
+.carrito-nombre{flex:1;font-weight:600;color:#3949ab}
+.carrito-mat{font-size:11.5px;color:var(--text3);margin-top:1px}
+.carrito-total{font-weight:700;color:#3949ab;white-space:nowrap;font-family:monospace}
+.carrito-del{background:none;border:none;color:#bbb;font-size:16px;cursor:pointer;padding:2px 6px}
+.carrito-del:hover{color:#b22020}
+.btn-carrito{background:#e8eaf6;border:1px solid #9fa8da;color:#3949ab;font:inherit;font-size:13px;font-weight:700;padding:10px;border-radius:var(--radius);cursor:pointer;width:100%;margin-bottom:6px}
+.btn-carrito:hover{background:#c5cae9}
 /* PRESUPUESTO IMPRIMIBLE */
 #cot-presupuesto{display:none}
 @media print{
@@ -1081,7 +1093,8 @@ Mercado Pago: hasta 12 cuotas sin interés.</textarea>
             <div id="cot-r-desc-badge" style="display:none;margin-top:6px;background:#e8f5e9;color:#1b5e20;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;text-align:center"></div>
           </div>
           <div class="cot-btns" style="flex-direction:column">
-            <button class="cot-btn" style="background:var(--text);color:#fff;width:100%" onclick="cotGuardar()">💾 Guardar cotización</button>
+            <button class="btn-carrito" onclick="cotAgregarPieza()">➕ Agregar pieza al presupuesto</button>
+            <button class="cot-btn" id="btn-guardar-cot" style="background:var(--text);color:#fff;width:100%" onclick="cotGuardar()">💾 Guardar cotización</button>
             <div style="display:flex;gap:8px;width:100%">
               <button class="cot-btn cot-btn-reset" onclick="cotReset()">Limpiar</button>
               <button class="cot-btn cot-btn-print" onclick="cotImprimir()">Imprimir / PDF</button>
@@ -1089,6 +1102,15 @@ Mercado Pago: hasta 12 cuotas sin interés.</textarea>
           </div>
         </div>
       </div>
+    </div>
+    <!-- CARRITO MULTI-ÍTEM -->
+    <div id="cot-carrito-card" class="carrito-card" style="display:none">
+      <div class="carrito-header">
+        <span style="font-size:14px;font-weight:800;color:#3949ab">🛒 Presupuesto multi-pieza</span>
+        <span id="cot-carrito-count" style="font-size:12px;font-weight:600;color:#3949ab;background:#c5cae9;padding:2px 8px;border-radius:20px;margin-left:4px"></span>
+        <span id="cot-carrito-total-badge" style="margin-left:auto;font-size:14px;font-weight:800;color:#3949ab"></span>
+      </div>
+      <div id="cot-carrito-list" style="padding:4px 0"></div>
     </div>
     <!-- HISTORIAL DE COTIZACIONES -->
     <div class="cot-card" style="margin-top:6px">
@@ -2675,7 +2697,10 @@ function cotSnapshot(){
     imagen:cotImg, soloCorte,
     descuento:parseFloat(document.getElementById("cot-descuento").value)||0,
     total:r.total, totalConDesc:r.totalConDesc, descPct:r.descPct, totalUSD:r.totalUSD,
-    estado:"pendiente"
+    estado:"pendiente",
+    // Si hay carrito, incluir todas las piezas y recalcular el total
+    piezas: cotCarrito.length>0 ? [...cotCarrito.map((p,i)=>({...p,r:undefined,nombre:p.nombre||'Pieza '+(i+1)})), {nombre:'Pieza '+(cotCarrito.length+1), mat:r.mat,esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,cant:r.cant,ancho:document.getElementById("cot-ancho").value,largo:document.getElementById("cot-largo").value,medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),golpes:r.golpes,pintura:r.pintOn,oxid:r.oxidOn,soloCorte:document.getElementById("cot-solo-corte").checked,total:r.totalConDesc}] ] : null,
+    totalCarrito: cotCarrito.length>0 ? cotCarrito.reduce((s,p)=>s+p.total,0)+r.totalConDesc : null,
   };
 }
 
@@ -2794,8 +2819,13 @@ function cargarPedidoEnCot(id){
 function cotGuardar(silencioso){
   if(!silencioso&&!cotValidar())return;
   if(typeof cotizaciones==="undefined")window.cotizaciones=[];
-  cotizaciones.unshift(cotSnapshot());
+  const snap=cotSnapshot();
+  // Si hay carrito, usar el total combinado
+  if(cotCarrito.length>0&&snap.totalCarrito){snap.total=snap.totalCarrito;snap.totalConDesc=snap.totalCarrito;}
+  cotizaciones.unshift(snap);
   cotNextNum=(cotNextNum||1)+1;
+  // Limpiar el carrito después de guardar
+  if(!silencioso&&cotCarrito.length>0){cotCarrito=[];renderCotCarrito();}
   // Si vino de un pedido y se guardó explícitamente (no desde imprimir), borrarlo
   if(!silencioso&&_pedidoActivoId){
     pedidos=pedidos.filter(p=>p.id!==_pedidoActivoId);
@@ -3577,6 +3607,8 @@ function cotCalc(){
 
 function cotImprimir(){
   if(!cotValidar())return;
+  // Si hay carrito, generar PDF multi-pieza
+  if(cotCarrito.length>0){cotImprimirMulti();return;}
   const r=cotCompute();
   const job=document.getElementById("cot-job").value||"Sin nombre";
   const fecha=new Date().toLocaleDateString("es-UY",{day:"2-digit",month:"long",year:"numeric"});
@@ -3674,7 +3706,125 @@ function cotImprimir(){
   Promise.all(pending).then(()=>window.print());
 }
 
-function cotReset(){if(!confirm("¿Limpiar el cotizador?"))return;_pedidoActivoId=null;_cotizacionActivaId=null;
+function cotImprimirMulti(){
+  const r=cotCompute();
+  const job=document.getElementById("cot-job").value||"Sin nombre";
+  const fecha=new Date().toLocaleDateString("es-UY",{day:"2-digit",month:"long",year:"numeric"});
+  const plazo=document.getElementById("cot-plazo").value||"A coordinar";
+  const pago=(document.getElementById("cot-pago").value||"").replace(/\n/g,"<br>");
+  const validez=document.getElementById("cot-validez").value||"15 días";
+  const numero=String(cotNextNum).padStart(4,"0");
+  const piezas=[...cotCarrito,{nombre:"Pieza "+(cotCarrito.length+1),mat:r.mat,esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,cant:r.cant,ancho:document.getElementById("cot-ancho").value,largo:document.getElementById("cot-largo").value,medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),golpes:r.golpes,pintura:r.pintOn,oxid:r.oxidOn,soloCorte:document.getElementById("cot-solo-corte").checked,total:r.totalConDesc,r}];
+  const totalGeneral=piezas.reduce((s,p)=>s+(p.total||0),0);
+  const imgHTML=cotImg?'<div class="pdesign"><img src="'+cotImg+'" alt="Diseño"></div>':"";
+  let preciosRows=piezas.map((p,i)=>{
+    const med=p.medidaCliente||(p.ancho&&p.largo?(p.ancho+" × "+p.largo+" mm"):"");
+    const desc=(p.soloCorte?"Solo corte":((p.mat||'')+(p.esp?' '+p.esp+'mm':''))+(med?' · '+med:''))+(p.golpes>0?' · Plegado':'')+(p.pintura?' · Pintado':'')+(p.oxid?' · Oxidado':'');
+    return '<tr><td>'+(i+1)+'. '+p.nombre+'<br><small>'+desc+'</small>'+(p.cant>1?'<br><small>'+p.cant+' unidades</small>':'')+'</td><td class="r">'+cotFmt(p.total)+'</td></tr>';
+  }).join("");
+  const cotActiva=_cotizacionActivaId?cotizaciones.find(x=>x.id===_cotizacionActivaId):null;
+  if(cotActiva?.ajuste)preciosRows+='<tr><td>'+cotActiva.ajuste.detalle+'<br><small>ajuste adicional</small></td><td class="r" style="color:'+(cotActiva.ajuste.monto>=0?"#2e7d32":"#c62828")+'">'+cotFmt(cotActiva.ajuste.monto)+'</td></tr>';
+  document.getElementById("cot-presupuesto").innerHTML=
+    '<div class="pwrap">'
+    +'<div class="ph"><div class="phlogo"><img src="'+FISCHER_LOGO+'" alt="Fischer Cutting"></div>'
+    +'<div class="phinfo"><div class="pnum">PRESUPUESTO N° '+numero+'</div>'
+    +'<div class="pdate">'+fecha+'</div><div class="pvalid">Válido por '+validez+'</div></div></div>'
+    +'<div class="pclient"><div class="plabel">Presupuesto para</div><div class="pname">'+job+'</div></div>'
+    +imgHTML
+    +'<div class="pdetail"><div class="ptitle">Detalle del trabajo</div><ul><li><b>'+piezas.length+' piezas</b></li></ul></div>'
+    +'<table class="pprice"><tbody>'+preciosRows+'</tbody></table>'
+    +'<div class="ptotalbox"><div class="ptlabel">TOTAL</div><div class="ptnum">'+cotFmt(totalGeneral)+'</div></div>'
+    +'<div class="pterms"><div class="ptermrow"><b>Plazo de entrega:</b> '+plazo+'</div>'
+    +'<div class="ptermrow"><b>Forma de pago:</b> '+pago+'</div></div>'
+    +'<div class="pbank"><div class="pbankinfo"><div class="pbanktitle">Datos para el pago</div>'
+    +'<div class="pbankrow"><b>Cuenta OCA Blue (pesos)</b></div><div class="pbankrow">N° de cuenta: 0795198</div>'
+    +'<div class="pbankrow">Titular: Luciano Federico Pancini Rosas</div>'
+    +'<div class="pbankrow" style="margin-top:6px">También por Mercado Pago escaneando el código →</div></div>'
+    +'<div class="pbankqr"><img src="'+MP_QR+'" alt="QR Mercado Pago"><div class="pbankqrtxt">Escaneá y pagá</div></div></div>'
+    +'<div class="pfoot"><div class="pfootbrand">Fischer Cutting</div><div class="pfoottxt">Corte láser · Trabajos en chapa</div></div>'
+    +'</div>';
+  cotGuardar(true);
+  const tituloOrig=document.title;
+  document.title="Presupuesto "+numero+" - "+job.replace(/[^\w\sáéíóúñÁÉÍÓÚÑ.-]/g,"").trim();
+  window.addEventListener("afterprint",function r(){document.title=tituloOrig;window.removeEventListener("afterprint",r);},{once:true});
+  setTimeout(()=>{if(document.title!==tituloOrig)document.title=tituloOrig;},5000);
+  const cont=document.getElementById("cot-presupuesto");
+  const imgs=cont.querySelectorAll("img");
+  const pending=[...imgs].map(img=>(img.complete&&img.naturalHeight>0)?Promise.resolve():new Promise(res=>{img.onload=res;img.onerror=res;setTimeout(res,2000);}));
+  Promise.all(pending).then(()=>window.print());
+}
+
+// ════════════════ CARRITO MULTI-ÍTEM ════════════════
+let cotCarrito=[];
+
+function cotAgregarPieza(){
+  if(!cotValidar())return;
+  const r=cotCompute();
+  const nombre=document.getElementById("cot-job").value||"Pieza "+(cotCarrito.length+1);
+  const medidaCliente=document.getElementById("cot-medida-cliente").value.trim();
+  const esp=document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value;
+  cotCarrito.push({
+    nombre,mat:r.mat,esp,cant:r.cant,
+    ancho:document.getElementById("cot-ancho").value,
+    largo:document.getElementById("cot-largo").value,
+    medidaCliente,
+    golpes:r.golpes,pintura:r.pintOn,oxid:r.oxidOn,
+    total:r.totalConDesc,totalConDesc:r.totalConDesc,
+    soloCorte:document.getElementById("cot-solo-corte").checked,
+    imagen:cotImg,
+    r // guardo el resultado completo para el PDF
+  });
+  renderCotCarrito();
+  // Limpio solo los campos de la pieza, mantengo cliente/dólar/condiciones
+  const job=document.getElementById("cot-job").value;
+  ["cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-medida-cliente"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("cot-cant").value=1;
+  ["cot-pintura","cot-oxid"].forEach(id=>document.getElementById(id).checked=false);
+  cotDelImg();
+  cotCalc();
+  showToast("✅ Pieza agregada al presupuesto");
+}
+
+function cotEliminarPieza(idx){
+  cotCarrito.splice(idx,1);
+  renderCotCarrito();
+  cotCalc();
+}
+
+function renderCotCarrito(){
+  const card=document.getElementById("cot-carrito-card");
+  const list=document.getElementById("cot-carrito-list");
+  const cnt=document.getElementById("cot-carrito-count");
+  const badge=document.getElementById("cot-carrito-total-badge");
+  const btn=document.getElementById("btn-guardar-cot");
+  if(!card)return;
+  if(!cotCarrito.length){
+    card.style.display="none";
+    if(btn)btn.textContent="💾 Guardar cotización";
+    return;
+  }
+  card.style.display="block";
+  const totalCarrito=cotCarrito.reduce((s,p)=>s+p.total,0);
+  if(cnt)cnt.textContent=cotCarrito.length+" pieza"+(cotCarrito.length>1?"s":"");
+  if(badge)badge.textContent=cotFmt(totalCarrito)+" (carrito)";
+  if(btn)btn.textContent=`💾 Guardar presupuesto (${cotCarrito.length} piezas + esta)`;
+  list.innerHTML=cotCarrito.map((p,i)=>`
+    <div class="carrito-row">
+      <div style="flex:1;min-width:0">
+        <div class="carrito-nombre">${i+1}. ${p.nombre}</div>
+        <div class="carrito-mat">${p.soloCorte?"Solo corte":((p.mat||'')+(p.esp?' · '+p.esp:'')+(p.medidaCliente?' · '+p.medidaCliente:(p.ancho&&p.largo?' · '+p.ancho+'×'+p.largo:'')))}</div>
+      </div>
+      <div class="carrito-total">${cotFmt(p.total)}</div>
+      <button class="carrito-del" onclick="cotEliminarPieza(${i})" title="Eliminar pieza">×</button>
+    </div>`).join("");
+}
+
+function cotReset(){
+  const tieneCarrito=cotCarrito.length>0;
+  const msg=tieneCarrito?"¿Limpiar el cotizador y vaciar el carrito ("+cotCarrito.length+" piezas)?":"¿Limpiar el cotizador?";
+  if(!confirm(msg))return;
+  cotCarrito=[];renderCotCarrito();
+  _pedidoActivoId=null;_cotizacionActivaId=null;
   ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil","cot-medida-cliente"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
