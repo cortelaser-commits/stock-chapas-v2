@@ -156,6 +156,28 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── GET /admin/fix-ts-2025 — migración única: actualiza timestamps 2025→2026 ─
+  if (req.method === 'GET' && url === '/admin/fix-ts-2025') {
+    if (!db) { jsonRes(res, 503, { error: 'db no lista' }); return; }
+    try {
+      const doc = await db.collection(COL_NAME).findOne({ _id: 'stock' });
+      if (!doc?.data?.cotizaciones) { jsonRes(res, 200, { ok: true, msg: 'sin cotizaciones' }); return; }
+      const UN_ANIO = 365 * 24 * 60 * 60 * 1000;
+      let n = 0;
+      const cots = doc.data.cotizaciones.map(c => {
+        if (new Date(c.ts).getFullYear() < 2026) {
+          n++;
+          return { ...c, ts: c.ts + UN_ANIO, id: c.id < 2000000000000 ? c.id + UN_ANIO : c.id };
+        }
+        return c;
+      });
+      const ts = Date.now();
+      await db.collection(COL_NAME).updateOne({ _id: 'stock' }, { $set: { 'data.cotizaciones': cots, 'data.ts': ts } });
+      jsonRes(res, 200, { ok: true, actualizadas: n, ts });
+    } catch(e) { jsonRes(res, 500, { error: e.message }); }
+    return;
+  }
+
   // ── GET /ts — timestamp liviano para detectar cambios ────────────────────
   if (req.method === 'GET' && url === '/ts') {
     if (!db) { jsonRes(res, 503, { error: 'db no lista' }); return; }
