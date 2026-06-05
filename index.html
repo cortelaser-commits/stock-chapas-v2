@@ -1092,7 +1092,22 @@ Mercado Pago: hasta 12 cuotas sin interés.</textarea>
     </div>
     <!-- HISTORIAL DE COTIZACIONES -->
     <div class="cot-card" style="margin-top:6px">
-      <div class="cot-card-h">📋 Cotizaciones guardadas <span id="cot-hist-count" style="margin-left:auto;font-weight:500;color:var(--text3)"></span></div>
+      <div class="cot-card-h" style="flex-wrap:wrap;gap:8px">
+        <span>📋 Cotizaciones guardadas</span>
+        <span id="cot-hist-count" style="font-weight:500;color:var(--text3)"></span>
+        <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap">
+          <input type="text" id="cot-search" placeholder="🔍 Buscar trabajo..." oninput="renderCotHist()" style="height:28px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:12px;background:var(--surface2);min-width:160px">
+          <select id="cot-filtro-estado" onchange="renderCotHist()" style="height:28px;padding:0 8px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:12px;background:var(--surface2)">
+            <option value="">Todos</option>
+            <option value="pendiente">⏳ Pendientes</option>
+            <option value="aceptada">✓ Aceptadas</option>
+            <option value="cortada">✂ Cortadas</option>
+            <option value="terminada">🎨 Terminadas</option>
+            <option value="lista">🚀 Entregadas</option>
+            <option value="rechazada">✗ Rechazadas</option>
+          </select>
+        </div>
+      </div>
       <div class="cot-b" id="cot-hist-list"><div style="color:var(--text3);font-size:13px">Todavía no guardaste ninguna cotización.</div></div>
     </div>
   </div>
@@ -1204,6 +1219,7 @@ async function cargarDesdeServidor(){
     _guardarBackupLocal();
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();
+    _checkAutoBackup();
   }catch(e){
     setSyncStatus("error","⚠️ Sin conexión al servidor");
     setTimeout(cargarDesdeServidor,8000);
@@ -1227,6 +1243,25 @@ function _guardarBackupLocal(){
     if(b2)localStorage.setItem("backup_1",b2);
     localStorage.setItem("backup_0",JSON.stringify(snapshot));
     localStorage.setItem("backup_ts",new Date().toLocaleString("es-UY"));
+  }catch(e){}
+}
+
+function _checkAutoBackup(){
+  try{
+    const hoy=new Date().toLocaleDateString('es-UY');
+    if(localStorage.getItem('auto_backup_date')===hoy)return; // ya se hizo hoy
+    const raw=localStorage.getItem("backup_0");
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    if(!data.cotizaciones?.length)return; // no guardar backup vacío
+    const fecha=new Date(data.ts).toISOString().slice(0,10);
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="stock_chapas_auto_"+fecha+".json";
+    a.click();
+    localStorage.setItem('auto_backup_date',hoy);
+    setTimeout(()=>showToast("💾 Backup automático del día descargado"),1500);
   }catch(e){}
 }
 
@@ -2934,8 +2969,78 @@ function renderCotHist(){
     lista:{label:"🚀 Entregada",bg:"#e0f2f1",color:"#00695c"}
   };
 
-  html+=`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;padding-top:4px">Historial completo</div>`;
-  html+=arr.map(c=>{
+  // ── Resumen mensual (feature 7) ─────────────────────────────────
+  const mesesMap=new Map();
+  arr.forEach(c=>{
+    const d=new Date(c.ts);
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const label=d.toLocaleDateString('es-UY',{month:'long',year:'numeric'});
+    if(!mesesMap.has(key))mesesMap.set(key,{label,aceptadas:0,pendientes:0,rechazadas:0,totalAcep:0,cobrado:0});
+    const m=mesesMap.get(key);
+    const est=c.estado||'pendiente';
+    if(est==='aceptada'||est==='cortada'||est==='terminada'||est==='lista'){m.aceptadas++;m.totalAcep+=_cotTotal(c);m.cobrado+=_pagosTotales(c);}
+    else if(est==='rechazada')m.rechazadas++;
+    else m.pendientes++;
+  });
+  if(mesesMap.size>0){
+    const mesesArr=[...mesesMap.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+    html+=`<details style="margin-bottom:16px" id="cot-resumen-mensual">
+      <summary style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;padding:8px 0;user-select:none">📊 Resumen mensual ▾</summary>
+      <div style="overflow-x:auto;margin-top:6px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:7px 10px;text-align:left;border-bottom:2px solid var(--border)">Mes</th>
+            <th style="padding:7px 10px;text-align:center;border-bottom:2px solid var(--border)">Aceptadas</th>
+            <th style="padding:7px 10px;text-align:center;border-bottom:2px solid var(--border)">Pendientes</th>
+            <th style="padding:7px 10px;text-align:center;border-bottom:2px solid var(--border)">Rechazadas</th>
+            <th style="padding:7px 10px;text-align:right;border-bottom:2px solid var(--border)">Total aceptado</th>
+            <th style="padding:7px 10px;text-align:right;border-bottom:2px solid var(--border)">Cobrado</th>
+            <th style="padding:7px 10px;text-align:right;border-bottom:2px solid var(--border)">Saldo</th>
+          </tr></thead>
+          <tbody>
+            ${mesesArr.map(([k,m])=>`<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:6px 10px;font-weight:600;text-transform:capitalize">${m.label}</td>
+              <td style="padding:6px 10px;text-align:center;color:var(--green-text);font-weight:700">${m.aceptadas}</td>
+              <td style="padding:6px 10px;text-align:center;color:var(--amber-text)">${m.pendientes}</td>
+              <td style="padding:6px 10px;text-align:center;color:var(--red-text)">${m.rechazadas}</td>
+              <td style="padding:6px 10px;text-align:right;font-weight:700">${cotFmt(m.totalAcep)}</td>
+              <td style="padding:6px 10px;text-align:right;color:#2e7d32;font-weight:700">${cotFmt(m.cobrado)}</td>
+              <td style="padding:6px 10px;text-align:right;color:${m.totalAcep-m.cobrado>0?"#c62828":"#2e7d32"};font-weight:700">${cotFmt(m.totalAcep-m.cobrado)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </details>`;
+  }
+
+  // ── Filtro de búsqueda (feature 1) ──────────────────────────────
+  const busqueda=(document.getElementById("cot-search")?.value||"").toLowerCase().trim();
+  const filtroEstado=document.getElementById("cot-filtro-estado")?.value||"";
+  const arrHist=arr.filter(c=>{
+    if(filtroEstado&&(c.estado||"pendiente")!==filtroEstado)return false;
+    if(busqueda&&!(c.job||"").toLowerCase().includes(busqueda)&&!String(c.num).includes(busqueda))return false;
+    return true;
+  });
+
+  // ── Recordatorio pendientes sin respuesta (feature 8) ────────────
+  const DIAS_ALERTA=7, DIAS_CRITICO=14;
+  const pendSinResp=arr.filter(c=>(c.estado||"pendiente")==="pendiente"&&(Date.now()-c.ts)/86400000>DIAS_ALERTA);
+  if(pendSinResp.length&&!filtroEstado&&!busqueda){
+    html+=`<div style="background:var(--amber-bg);border:1px solid #f0d89a;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;align-items:center;gap:8px">
+      <span>⏰</span>
+      <span><b>${pendSinResp.length}</b> cotización${pendSinResp.length>1?"es":""} pendiente${pendSinResp.length>1?"s":""} sin respuesta hace más de ${DIAS_ALERTA} días</span>
+    </div>`;
+  }
+
+  const labelFiltro=filtroEstado||busqueda?` (${arrHist.length} resultado${arrHist.length!==1?"s":""})`:` (${arr.length})`;
+  html+=`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;padding-top:4px">Historial completo${labelFiltro}</div>`;
+
+  if(!arrHist.length){
+    html+='<div style="color:var(--text3);font-size:13px;padding:8px 0">No hay cotizaciones que coincidan.</div>';
+    el.innerHTML=html;return;
+  }
+
+  html+=arrHist.map(c=>{
     const f=new Date(c.ts).toLocaleDateString("es-UY",{day:"2-digit",month:"2-digit",year:"2-digit"});
     const estado=c.estado||"pendiente";
     const ecfg=ESTADO_CFG[estado]||ESTADO_CFG.pendiente;
@@ -2946,10 +3051,14 @@ function renderCotHist(){
     const saldo=totalReal-pagado;
     const ajusteBadge=conPagos&&c.ajuste?` <span class="ajuste-badge" title="${c.ajuste.detalle}">${c.ajuste.monto>=0?"+":""}${cotFmt(c.ajuste.monto)}</span>`:"";
     const pagoSub=conPagos&&pagado>0?` · <span style="color:${saldo<=0?"#2e7d32":"#f57f17"};font-weight:700">${saldo<=0?"✅ Pagado":"Seña "+cotFmt(pagado)+" · Saldo "+cotFmt(saldo)}</span>`:"";
+    // ── Recordatorio (feature 8) ──────────────────────────
+    const dias=Math.floor((Date.now()-c.ts)/86400000);
+    const recordatorio=estado==="pendiente"&&dias>=DIAS_ALERTA
+      ?` <span style="font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px;background:${dias>=DIAS_CRITICO?"var(--red-bg)":"var(--amber-bg)"};color:${dias>=DIAS_CRITICO?"var(--red-text)":"var(--amber-text)"}">⏰ ${dias}d</span>`:"";
     return `<div style="border-bottom:1px solid var(--border)">
-      <div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto ${conPagos?"auto auto":""};gap:8px;align-items:center;padding:10px 0;border:none">
+      <div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto ${conPagos?"auto auto auto":""};gap:6px;align-items:center;padding:10px 0;border:none">
         <div>
-          <div class="cot-hist-job">${c.job||"Sin nombre"}</div>
+          <div class="cot-hist-job">${c.job||"Sin nombre"}${recordatorio}</div>
           <div class="cot-hist-sub">${f} · ${matInfo} · ${c.cant} u.${pagoSub}</div>
         </div>
         <div class="cot-hist-tot cot-mono">${cotFmt(totalReal)}${ajusteBadge}</div>
@@ -2965,6 +3074,7 @@ function renderCotHist(){
         ${conPagos?`<button class="btn-ajuste" onclick="cotToggleTerm(${c.id})" title="Editar terminación">🔧</button>`:""}
         ${conPagos?`<button class="btn-ajuste" onclick="cotToggleAjuste(${c.id})">✏️</button>`:""}
         ${conPagos?`<button class="btn-pagos" onclick="cotTogglePagos(${c.id})">💳</button>`:""}
+        <button class="cot-hist-btn" onclick="cotDuplicar(${c.id})" title="Duplicar esta cotización">📋</button>
         <button class="cot-hist-btn" onclick="cotReabrir(${c.id})">Abrir</button>
         <button class="cot-hist-del" onclick="cotBorrarHist(${c.id})">🗑</button>
       </div>
@@ -3249,6 +3359,12 @@ function cotReabrir(id){
   cotStock();cotCalc();
   try{window.scrollTo({top:0,behavior:"smooth"});}catch(e){}
   if(typeof showToast==="function")showToast("📂 Cotización cargada — podés editar o reimprimir");
+}
+function cotDuplicar(id){
+  const c=cotizaciones.find(x=>x.id===id);if(!c)return;
+  _cotizacionActivaId=null; // nueva cotización, no ligada a ninguna existente
+  cotReabrir(id);           // pre-llena el formulario con los datos
+  showToast("📋 Cotización duplicada — modificá lo que necesites y guardá como nueva");
 }
 function cotBorrarHist(id){
   if(!confirm("¿Borrar esta cotización del historial?"))return;
