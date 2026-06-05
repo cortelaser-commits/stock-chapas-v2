@@ -1236,12 +1236,12 @@ function _guardarBackupLocal(){
       cotizaciones,cotNextNum,pedidos:pedidos||[],
       agotados:window.agotados||[]
     };
-    // Guardar backup actual y rotar (máximo 3)
-    const b2=localStorage.getItem("backup_1")||null;
-    const b1=localStorage.getItem("backup_0")||null;
-    if(b1)localStorage.setItem("backup_2",b1);  // el anterior pasa a ser el viejo
-    if(b2)localStorage.setItem("backup_1",b2);
-    localStorage.setItem("backup_0",JSON.stringify(snapshot));
+    // Guardar backup actual y rotar (máximo 3): 0=nuevo, 1=anterior, 2=más viejo
+    const b0=localStorage.getItem("backup_0")||null;
+    const b1=localStorage.getItem("backup_1")||null;
+    if(b1)localStorage.setItem("backup_2",b1); // backup_1 → backup_2 (el más viejo)
+    if(b0)localStorage.setItem("backup_1",b0); // backup_0 → backup_1
+    localStorage.setItem("backup_0",JSON.stringify(snapshot)); // nuevo → backup_0
     localStorage.setItem("backup_ts",new Date().toLocaleString("es-UY"));
   }catch(e){}
 }
@@ -1392,11 +1392,15 @@ setInterval(async()=>{
       const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(30000)});
       const data=await r.json();
       if(data&&data.ts){
-        items=data.items;nextId=data.nextId||100;historial=data.historial||[];
+        // items: solo actualizar si el servidor tiene al menos tantos como local (evita borrar cambios no guardados)
+        if(Array.isArray(data.items)&&(data.items.length>=items.length||items.length===0))items=data.items;
+        nextId=data.nextId||100;historial=data.historial||[];
         if(data.laserItems)laserItems=data.laserItems;
         if(data.laserNextId)laserNextId=data.laserNextId;
         if(data.cotNextNum)cotNextNum=data.cotNextNum;
-        if(data.pedidos)pedidos=data.pedidos;
+        // pedidos: protección similar
+        if(Array.isArray(data.pedidos)&&(data.pedidos.length>=pedidos.length||pedidos.length===0))pedidos=data.pedidos;
+        else if(data.pedidos&&!Array.isArray(data.pedidos))pedidos=data.pedidos;
         // GUARD: nunca sobreescribir cotizaciones si el servidor trae menos de las esperadas
         if(Array.isArray(data.cotizaciones)){
           if(data.cotizaciones.length>=cotizaciones.length||cotizaciones.length===0){
@@ -2792,8 +2796,8 @@ function cotGuardar(silencioso){
   if(typeof cotizaciones==="undefined")window.cotizaciones=[];
   cotizaciones.unshift(cotSnapshot());
   cotNextNum=(cotNextNum||1)+1;
-  // Si vino de un pedido, borrarlo automáticamente
-  if(_pedidoActivoId){
+  // Si vino de un pedido y se guardó explícitamente (no desde imprimir), borrarlo
+  if(!silencioso&&_pedidoActivoId){
     pedidos=pedidos.filter(p=>p.id!==_pedidoActivoId);
     _pedidoActivoId=null;
     renderPedidos();
@@ -3362,14 +3366,17 @@ function cotReabrir(id){
 }
 function cotDuplicar(id){
   const c=cotizaciones.find(x=>x.id===id);if(!c)return;
-  _cotizacionActivaId=null; // nueva cotización, no ligada a ninguna existente
-  cotReabrir(id);           // pre-llena el formulario con los datos
+  cotReabrir(id);                // pre-llena el formulario
+  _cotizacionActivaId=null;      // desligar DESPUÉS de cotReabrir (que lo setea), así es nueva cotización
   showToast("📋 Cotización duplicada — modificá lo que necesites y guardá como nueva");
 }
 function cotBorrarHist(id){
   if(!confirm("¿Borrar esta cotización del historial?"))return;
   cotizaciones=cotizaciones.filter(x=>x.id!==id);
-  if(typeof guardarEnServidor==="function")guardarEnServidor();
+  // CRÍTICO: actualizar _cotizacionesCargadas al borrar para que GUARD 2 no bloquee los saves
+  _cotizacionesCargadas=Math.min(_cotizacionesCargadas,cotizaciones.length);
+  _lastSavedHash=null;
+  if(typeof guardarEnServidor==="function")guardarEnServidor(true);
   renderCotHist();
 }
 
