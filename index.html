@@ -987,7 +987,8 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
               <input type="number" class="cot-mono" id="cot-golpes" placeholder="0" min="0" oninput="cotCalc()">
               <div class="hint">Se cobra <span id="cot-hg">US$5</span> por golpe, por cartel.</div></div>
             <div class="cot-f" style="margin-bottom:0"><label>Terminaciones (por m², mínimo $500)</label>
-              <label class="cot-chk"><input type="checkbox" id="cot-pintura" onchange="cotCalc()"><span class="ti">Pintura<small id="cot-sp">$2.500 por m²</small></span><span class="pr cot-mono" id="cot-pr-p">—</span></label>
+              <label class="cot-chk"><input type="checkbox" id="cot-pintura" onchange="cotCalc();document.getElementById('cot-color-wrap').style.display=this.checked?'flex':'none'"><span class="ti">Pintura<small id="cot-sp">$2.500 por m²</small></span><span class="pr cot-mono" id="cot-pr-p">—</span></label>
+              <div id="cot-color-wrap" style="display:none;align-items:center;gap:8px;margin:4px 0 6px 24px"><span style="font-size:12px;color:var(--text3);white-space:nowrap">Color:</span><input type="text" id="cot-color-pintura" placeholder="Ej: Blanco RAL 9010, Negro mate…" style="flex:1;padding:5px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text)"></div>
               <label class="cot-chk"><input type="checkbox" id="cot-oxid" onchange="cotCalc()"><span class="ti">Oxidación<small id="cot-so">$2.000 por m²</small></span><span class="pr cot-mono" id="cot-pr-o">—</span></label>
             </div>
           </div>
@@ -2741,7 +2742,7 @@ function cotSnapshot(){
     areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value, medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),
     modo:cotModo, mm:document.getElementById("cot-mm").value, min:document.getElementById("cot-min").value,
     golpes:document.getElementById("cot-golpes").value,
-    pintura:document.getElementById("cot-pintura").checked, oxid:document.getElementById("cot-oxid").checked, envio:document.getElementById("cot-envio").checked, embalaje:document.getElementById("cot-embalaje").checked, colocacion:document.getElementById("cot-colocacion").checked, colocacionMonto:document.getElementById("cot-colocacion-monto").value,
+    pintura:document.getElementById("cot-pintura").checked, colorPintura:document.getElementById("cot-color-pintura").value.trim(), oxid:document.getElementById("cot-oxid").checked, envio:document.getElementById("cot-envio").checked, embalaje:document.getElementById("cot-embalaje").checked, colocacion:document.getElementById("cot-colocacion").checked, colocacionMonto:document.getElementById("cot-colocacion-monto").value,
     diseno:document.getElementById("cot-diseno").value,
     ilum:document.getElementById("cot-ilum").value, sold:document.getElementById("cot-sold").value, cil:document.getElementById("cot-cil").value,
     ops:cotOps.filter(o=>o).map(o=>({nombre:o.nombre,monto:o.monto,porUnidad:o.porUnidad})),
@@ -3359,36 +3360,74 @@ function generarOT(ids){
   // Cada cotización
   cots.forEach((c,i)=>{
     if(i>0)html+='<hr class="ot-sep">';
-    const totalReal=_cotTotal(c);
-    const pagado=_pagosTotales(c);
-    const saldo=totalReal-pagado;
-    const medDisplay=c.medidaCliente||(c.ancho&&c.largo?(c.ancho+'×'+c.largo+' mm'):(c.area?(c.area+' m²'):'—'));
-    const termParts=[];
-    if(c.pintura)termParts.push('🎨 Pintado');
-    if(c.oxid)termParts.push('🔥 Oxidado');
-    if(c.golpes>0)termParts.push('↕ Plegado ('+c.golpes+' golpe'+(c.golpes>1?'s':'')+')')
-    if(!c.pintura&&!c.oxid)termParts.push('✓ Sin terminación');
+    // ── Nombre del trabajo ──
     html+='<div class="ot-job">';
     html+='<div class="ot-job-name">'+(c.job||'Sin nombre')+'</div>';
     html+='<div class="ot-job-sub">Presupuesto N° '+String(c.num).padStart(4,'0')+'</div>';
     html+='</div>';
-    html+='<div class="ot-grid">';
-    html+='<div class="ot-box"><div class="ot-box-label">Material</div><div class="ot-box-val">'+(c.soloCorte?'Solo corte':((c.mat||'')+(c.esp?' · '+c.esp+'mm':'')))+' · '+c.cant+' '+(c.cant===1?'unidad':'unidades')+'</div></div>';
-    html+='<div class="ot-box"><div class="ot-box-label">Medida del cartel</div><div class="ot-box-val">'+medDisplay+'</div></div>';
-    html+='<div class="ot-box" style="grid-column:1/-1"><div class="ot-box-label">Terminación</div><div class="ot-term-row">'+termParts.map(t=>'<span style="background:#f5f5f5;border:1px solid #ddd;border-radius:20px;padding:3px 10px;font-size:13px;font-weight:700">'+t+'</span>').join('')+'</div></div>';
-    html+='</div>';
-    html+='<div class="ot-grid">';
-    html+='<div class="ot-box"><div class="ot-box-label">Precio total</div><div class="ot-box-val">'+cotFmt(totalReal)+(c.ajuste?'<span style="font-size:11px;color:#e65100;font-weight:600;margin-left:6px">(incl. ajuste)</span>':'')+'</div>';
-    if(pagado>0)html+='<div class="ot-pago-row">Cobrado: <b style="color:#2e7d32">'+cotFmt(pagado)+'</b></div>';
-    if(saldo>0)html+='<div class="ot-pago-row">Saldo pendiente: <b style="color:#c62828">'+cotFmt(saldo)+'</b></div>';
-    if(saldo<=0&&pagado>0)html+='<div class="ot-pago-row" style="color:#2e7d32;font-weight:700">✅ Cobrado completo</div>';
-    html+='</div>';
-    html+='<div class="ot-box"><div class="ot-box-label">Plazo de entrega</div><div class="ot-box-val">'+(c.plazo||'A coordinar')+'</div>';
-    if(c.pago)html+='<div class="ot-pago-row">Forma de pago: '+(c.pago||'').replace(/\n/g,', ')+'</div>';
-    html+='</div>';
-    html+='</div>';
-    if(c.ajuste)html+='<div class="ot-box" style="margin-bottom:14px"><div class="ot-box-label">Ajuste de precio</div><div style="font-size:13px"><b>'+(c.ajuste.monto>=0?'+':'')+cotFmt(c.ajuste.monto)+'</b> — '+c.ajuste.detalle+'</div></div>';
-    html+='<div class="ot-obs"><div class="ot-box-label">Observaciones / Notas de taller</div></div>';
+    // ── Material y medidas ──
+    const piezas=c.piezas&&c.piezas.length>0;
+    if(piezas){
+      // Multi-pieza: mostrar cada pieza con sus medidas
+      html+='<div class="ot-box" style="margin-bottom:14px"><div class="ot-box-label">Piezas del trabajo</div>';
+      html+='<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px">';
+      html+='<tr style="background:#f5f5f5;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em"><td style="padding:5px 8px">Pieza</td><td style="padding:5px 8px">Material</td><td style="padding:5px 8px">Medida</td><td style="padding:5px 8px;text-align:center">Cant.</td></tr>';
+      c.piezas.forEach((p,pi)=>{
+        const med=p.medidaCliente||(p.ancho&&p.largo?(p.ancho+'×'+p.largo+' mm'):(p.area?(p.area+' m²'):'—'));
+        const mat=p.soloCorte?'Solo corte':((p.mat||c.mat||'')+(p.esp?' · '+p.esp+'mm':''));
+        html+='<tr style="border-top:1px solid #eee"><td style="padding:5px 8px;font-weight:700">'+(p.nombre||('Pieza '+(pi+1)))+'</td><td style="padding:5px 8px">'+mat+'</td><td style="padding:5px 8px;font-family:monospace">'+med+'</td><td style="padding:5px 8px;text-align:center">'+p.cant+'</td></tr>';
+      });
+      html+='</table></div>';
+    } else {
+      // Una sola pieza
+      const med1=c.ancho&&c.largo?(c.ancho+' × '+c.largo+' mm'):'';
+      const med2=c.medidaCliente?c.medidaCliente:'';
+      const medDisplay=med1+(med1&&med2?' — ':'')+med2||(c.area?(c.area+' m²'):'—');
+      html+='<div class="ot-grid">';
+      html+='<div class="ot-box"><div class="ot-box-label">Material</div><div class="ot-box-val">'+(c.soloCorte?'Solo corte':((c.mat||'—')+(c.esp?' · '+c.esp+'mm':'')))+' </div><div style="font-size:13px;margin-top:4px;color:#555">'+c.cant+' '+(c.cant===1?'unidad':'unidades')+'</div></div>';
+      html+='<div class="ot-box"><div class="ot-box-label">Medidas</div><div class="ot-box-val" style="font-family:monospace">'+medDisplay+'</div></div>';
+      html+='</div>';
+    }
+    // ── Terminaciones y acabados ──
+    const termItems=[];
+    if(c.golpes>0)termItems.push({icon:'↕',label:'Plegado',val:c.golpes+' golpe'+(c.golpes>1?'s':'')});
+    if(c.pintura)termItems.push({icon:'🎨',label:'Pintado',val:c.colorPintura||'—'});
+    if(c.oxid)termItems.push({icon:'🔥',label:'Oxidado',val:''});
+    if(c.ilum>0)termItems.push({icon:'💡',label:'Iluminación',val:''});
+    if(c.sold>0)termItems.push({icon:'🔧',label:'Soldadura',val:''});
+    if(c.cil>0)termItems.push({icon:'⭕',label:'Cilindrado',val:''});
+    if(c.colocacion)termItems.push({icon:'🔩',label:'Colocación',val:''});
+    if(c.envio)termItems.push({icon:'🚚',label:'Envío',val:''});
+    // Operaciones extra (accesorios, bisagras, etc.)
+    const opsExtra=(c.ops||[]).filter(o=>o&&o.nombre);
+    if(termItems.length>0||opsExtra.length>0){
+      html+='<div class="ot-box" style="margin-bottom:14px"><div class="ot-box-label">Terminaciones y detalle del trabajo</div>';
+      html+='<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px">';
+      termItems.forEach(t=>{
+        html+='<div style="display:flex;align-items:center;gap:10px;font-size:13px">';
+        html+='<span style="width:22px;text-align:center">'+t.icon+'</span>';
+        html+='<span style="font-weight:700;min-width:90px">'+t.label+'</span>';
+        if(t.val)html+='<span style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:4px;padding:2px 10px;font-weight:700;color:#e65100">'+t.val+'</span>';
+        html+='</div>';
+      });
+      if(opsExtra.length>0){
+        if(termItems.length>0)html+='<div style="border-top:1px dashed #ddd;margin:4px 0"></div>';
+        html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:2px">Accesorios y operaciones extra</div>';
+        opsExtra.forEach(op=>{
+          html+='<div style="display:flex;align-items:center;gap:10px;font-size:13px">';
+          html+='<span style="width:22px;text-align:center">▸</span>';
+          html+='<span style="font-weight:600">'+op.nombre+'</span>';
+          html+='</div>';
+        });
+      }
+      html+='</div></div>';
+    } else {
+      html+='<div class="ot-box" style="margin-bottom:14px;background:#f9f9f9"><div class="ot-box-label">Terminación</div><div style="font-size:13px;font-weight:700;margin-top:6px">✓ Sin terminación · Solo corte</div></div>';
+    }
+    // ── Plazo ──
+    html+='<div class="ot-box" style="margin-bottom:14px"><div class="ot-box-label">Plazo de entrega</div><div class="ot-box-val">'+(c.plazo||'A coordinar')+'</div></div>';
+    // ── Notas de taller ──
+    html+='<div class="ot-obs"><div class="ot-box-label">Notas de taller</div></div>';
   });
   html+='<div class="ot-footer">Fischer Cutting · Corte láser · Trabajos en chapa</div>';
   html+='</div>';
@@ -3425,6 +3464,8 @@ function cotReabrir(id){
   document.getElementById("cot-min").value=c.min||"";
   document.getElementById("cot-golpes").value=c.golpes||"";
   document.getElementById("cot-pintura").checked=!!c.pintura;
+  document.getElementById("cot-color-pintura").value=c.colorPintura||"";
+  document.getElementById("cot-color-wrap").style.display=c.pintura?"flex":"none";
   document.getElementById("cot-oxid").checked=!!c.oxid;
   document.getElementById("cot-envio").checked=!!c.envio;
   document.getElementById("cot-embalaje").checked=(c.embalaje!==undefined)?!!c.embalaje:true;
@@ -3883,6 +3924,8 @@ function cotReset(){
   ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil","cot-medida-cliente"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
+  document.getElementById("cot-color-pintura").value="";
+  document.getElementById("cot-color-wrap").style.display="none";
   document.getElementById("cot-embalaje").checked=true;
   document.getElementById("cot-colocacion").checked=false;
   document.getElementById("cot-colocacion-monto").value="";
