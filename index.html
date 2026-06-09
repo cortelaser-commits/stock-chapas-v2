@@ -1238,12 +1238,22 @@ async function cargarDesdeServidor(){
     if(!r.ok)throw new Error();
     const data=await r.json();
     // Si ya cargamos desde cache y tenemos cambios sin guardar → guardar en servidor (no sobreescribir)
+    // GUARD: solo empujar datos locales si tenemos AL MENOS tantas cotizaciones como el servidor
+    // Evita borrar datos del servidor cuando localStorage estaba vacío y la app arrancó en blanco
     if(_datosYaCargados && _lastSavedHash===null){
-      _cotizacionesCargadas=cotizaciones.length;
-      setSyncStatus("ok","Conectado ✓ — guardando cambios locales...");
-      guardarEnServidor(true);
-      _checkAutoBackup();
-      return;
+      const serverCots=(data.cotizaciones||[]).length;
+      const serverItems=(data.items||[]).length;
+      if(cotizaciones.length >= serverCots && items.length >= serverItems){
+        _cotizacionesCargadas=cotizaciones.length;
+        setSyncStatus("ok","Conectado ✓ — guardando cambios locales...");
+        guardarEnServidor(true);
+        _checkAutoBackup();
+        return;
+      } else {
+        // El servidor tiene más datos — cargar del servidor en vez de sobreescribir
+        console.warn('GUARD reconexión: servidor tiene más datos ('+serverCots+' cots) que local ('+cotizaciones.length+'). Cargando del servidor.');
+        _lastSavedHash=null; // forzar re-carga normal
+      }
     }
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones){cotizaciones=data.cotizaciones;// Sanitizar IDs: convertir strings como "cot-1234" a número 1234
 cotizaciones.forEach(c=>{if(typeof c.id==='string'){const n=parseInt(c.id.replace(/\D/g,''));if(!isNaN(n)&&n>0){console.log('ID sanitizado:',c.id,'→',n,'('+c.job+')');c.id=n;}}});}if(data.cotNextNum)cotNextNum=data.cotNextNum;if(data.pedidos)pedidos=data.pedidos;actualizarFecha(data.ts);}
