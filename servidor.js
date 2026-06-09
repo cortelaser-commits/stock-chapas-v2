@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URL = process.env.MONGO_URL || '';
 const DB_NAME = 'stockchapas';
 const COL_NAME = 'stock';
-const MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB máximo por request
+const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB máximo por request
 let db = null;
 
 // Capturar rechazos no manejados para que el servidor no se caiga
