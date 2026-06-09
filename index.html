@@ -1334,7 +1334,7 @@ function restaurarDesdeArchivo(input){
 
 // ─── API quirúrgica — cada operación manda solo lo que cambió (~200B vs 50KB) ──
 
-function _syncTs(ts){ if(ts){ window._lastTs=ts; actualizarFecha(ts); _lastSavedHash=_dataHash(); } }
+function _syncTs(ts){ if(ts){ window._lastTs=ts; actualizarFecha(ts); } }
 
 async function _apiPatch(path, body){
   setSyncStatus("syncing","Guardando...");
@@ -3456,7 +3456,8 @@ function cotSetEstado(id, estado){
   const c=cotizaciones.find(x=>x.id===id);
   if(!c)return;
   c.estado=estado;
-  _apiPatch(`/stock/cotizacion/${id}`,{estado}); // endpoint liviano en vez de save completo
+  _apiPatch(`/stock/cotizacion/${id}`,{estado}); // endpoint liviano (inmediato)
+  guardarEnServidor();  // también guardar completo para asegurar consistencia
   renderCotHist();
 }
 
