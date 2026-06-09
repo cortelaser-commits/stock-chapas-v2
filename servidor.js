@@ -325,9 +325,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── PATCH /stock/cotizacion/:id — actualizar estado de una cotización ─────
-  if (req.method === 'PATCH' && /^\/stock\/cotizacion\/\d+$/.test(url)) {
+  if (req.method === 'PATCH' && /^\/stock\/cotizacion\/[^/]+$/.test(url)) {
     if (!db) { jsonRes(res, 503, { error: 'db no lista' }); return; }
-    const cotId = parseId(url);
+    // Acepta IDs numéricos (1748822400001) o strings con prefijo ("cot-1234" → 1234)
+    const rawId = url.split('/').pop();
+    const cotId = /^\d+$/.test(rawId) ? parseInt(rawId) : (parseInt(rawId.replace(/\D/g,'')) || rawId);
     try {
       const body = await parseBody(req); // { estado }
       const ts = Date.now();
