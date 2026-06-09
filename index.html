@@ -1230,20 +1230,52 @@ function setSyncStatus(estado,msg){
 
 async function cargarDesdeServidor(){
   try{
-    setSyncStatus("syncing","Cargando...");
+    setSyncStatus("syncing",_datosYaCargados?"Reconectando...":"Cargando...");
     const r=await fetch(API+"/stock",{signal:AbortSignal.timeout(45000)});
     if(!r.ok)throw new Error();
     const data=await r.json();
+    // Si ya cargamos desde cache y tenemos cambios sin guardar → guardar en servidor (no sobreescribir)
+    if(_datosYaCargados && _lastSavedHash===null){
+      _cotizacionesCargadas=cotizaciones.length;
+      setSyncStatus("ok","Conectado ✓ — guardando cambios locales...");
+      guardarEnServidor(true);
+      _checkAutoBackup();
+      return;
+    }
     if(data&&data.items){items=data.items;nextId=data.nextId||100;historial=data.historial||[];if(data.laserItems)laserItems=data.laserItems;if(data.laserNextId)laserNextId=data.laserNextId;if(data.cotizaciones)cotizaciones=data.cotizaciones;if(data.cotNextNum)cotNextNum=data.cotNextNum;if(data.pedidos)pedidos=data.pedidos;actualizarFecha(data.ts);}
     _lastSavedHash=_dataHash();
     _datosYaCargados=true;
-    _cotizacionesCargadas=cotizaciones.length; // registrar cuántas hay
+    _cotizacionesCargadas=cotizaciones.length;
     _guardarBackupLocal();
     setSyncStatus("ok","Sincronizado ✓");
     inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();
     _checkAutoBackup();
   }catch(e){
-    setSyncStatus("error","⚠️ Sin conexión al servidor");
+    if(!_datosYaCargados){
+      // Primer intento fallido → intentar cargar desde cache local (el servidor puede estar dormido)
+      try{
+        const raw=localStorage.getItem("cache_local")||localStorage.getItem("backup_0");
+        if(raw){
+          const d=JSON.parse(raw);
+          if(d&&d.items){
+            items=d.items;nextId=d.nextId||100;historial=d.historial||[];
+            if(d.laserItems)laserItems=d.laserItems;if(d.laserNextId)laserNextId=d.laserNextId;
+            if(d.cotizaciones)cotizaciones=d.cotizaciones;if(d.cotNextNum)cotNextNum=d.cotNextNum;
+            if(d.pedidos)pedidos=d.pedidos;if(d.agotados)window.agotados=d.agotados;
+            _datosYaCargados=true;
+            _cotizacionesCargadas=cotizaciones.length;
+            _lastSavedHash=null; // datos no confirmados en servidor — forzar save cuando vuelva
+            inicializarPrecios();render();renderHistorial();poblarSelectorMes();cotPoblarEspesores();
+            if(typeof renderCotHist==="function")renderCotHist();if(typeof renderPedidos==="function")renderPedidos();
+            setSyncStatus("error","⚠️ Servidor no disponible — mostrando datos guardados localmente");
+          }
+        }else{
+          setSyncStatus("error","⚠️ Sin conexión al servidor");
+        }
+      }catch(e2){ setSyncStatus("error","⚠️ Sin conexión al servidor"); }
+    }else{
+      setSyncStatus("error","⚠️ Sin conexión (reintentando...)");
+    }
     setTimeout(cargarDesdeServidor,8000);
   }
 }
@@ -1265,6 +1297,18 @@ function _guardarBackupLocal(){
     if(b0)localStorage.setItem("backup_1",b0); // backup_0 → backup_1
     localStorage.setItem("backup_0",JSON.stringify(snapshot)); // nuevo → backup_0
     localStorage.setItem("backup_ts",new Date().toLocaleString("es-UY"));
+  }catch(e){}
+}
+
+// Cache inmediato: se guarda en localStorage ANTES de llegar al servidor
+// Si el servidor falla o se duerme, este cache protege los datos del último estado
+function _guardarCacheLocal(){
+  try{
+    localStorage.setItem("cache_local",JSON.stringify({
+      items,nextId,historial,laserItems,laserNextId,
+      cotizaciones,cotNextNum,pedidos:pedidos||[],
+      agotados:window.agotados||[],ts:Date.now()
+    }));
   }catch(e){}
 }
 
@@ -1370,6 +1414,7 @@ async function _apiDelete(path, body){
 // guardarEnServidor()        → debounce normal (1500ms) para cambios frecuentes
 // guardarEnServidor(true)    → inmediato (100ms) para modales y ediciones críticas
 function guardarEnServidor(inmediato){
+  _guardarCacheLocal(); // ← protección: guardar en localStorage ANTES de llegar al servidor
   const dot=document.getElementById("sync-dot"),txt=document.getElementById("sync-txt");
   dot.className="sync-dot syncing";txt.textContent="Pendiente...";
   clearTimeout(_saveTimer);
@@ -1399,7 +1444,11 @@ async function _doSave(){
     _cotizacionesCargadas=Math.max(_cotizacionesCargadas,cotizaciones.length); // actualizar mínimo conocido
     setSyncStatus("ok","Guardado ✓");actualizarFecha();
     _guardarBackupLocal();
-  }catch(e){setSyncStatus("error","⚠️ No se pudo guardar");}
+  }catch(e){
+    setSyncStatus("error","⚠️ No se pudo guardar — reintentando en 15s");
+    // Reintento automático: si el servidor estaba dormido, en 15s probablemente ya despertó
+    setTimeout(()=>{ if(_datosYaCargados && _lastSavedHash!==_dataHash()) _doSave(); }, 15000);
+  }
 }
 
 let _sincronizando=false;
@@ -3977,6 +4026,14 @@ function renderStats(){
 }
 
 // ─── INICIO ─────────────────────────────────────────────────────────────────
+
+// Aviso si el usuario cierra o recarga con cambios sin confirmar en el servidor
+window.addEventListener("beforeunload", e => {
+  if(_datosYaCargados && _lastSavedHash !== _dataHash()){
+    e.preventDefault();
+    e.returnValue = "Hay cambios pendientes de guardar. ¿Cerrar igual?";
+  }
+});
 
 if(sessionStorage.getItem("auth")==="ok"){
   document.getElementById("login-screen").style.display="none";
