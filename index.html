@@ -3252,6 +3252,7 @@ function _renderPagoPanel(c){
     <span>Saldo: <b style="color:${saldo<=0?"#2e7d32":"#c62828"}">${cotFmt(saldo)}</b></span>
   </div>`;
   h+=`<div class="pago-add">
+    ${saldo>0?`<button onclick="document.getElementById('pago-monto-${c.id}').value=${saldo};document.getElementById('pago-monto-${c.id}').focus()" style="grid-column:1/-1;background:#e8f5e9;border:1.5px solid #66bb6a;color:#1b5e20;font:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:var(--radius);cursor:pointer;text-align:left">💰 Pagar saldo completo — <span style="font-family:monospace">${cotFmt(saldo)}</span></button>`:''}
     <input type="number" id="pago-monto-${c.id}" placeholder="Monto $" min="1" onkeydown="if(event.key==='Enter')cotAgregarPago(${c.id})">
     <select id="pago-forma-${c.id}">
       <option value="transferencia">Transferencia</option>
