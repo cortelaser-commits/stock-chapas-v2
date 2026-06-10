@@ -914,6 +914,16 @@ tbody td{padding:10px 14px;font-size:13px;vertical-align:middle}
               <div class="cot-f"><label>Cantidad</label><input type="number" class="cot-mono" id="cot-cant" value="1" min="1" oninput="cotCalc()"></div>
               <div class="cot-f"><label>Dólar $</label><input type="number" class="cot-mono" id="cot-dolar" value="41" step="0.5" oninput="cotCalc()"></div>
             </div>
+          </div>
+          <div class="cot-f" style="margin-top:4px"><label>¿Por dónde nos contactó?</label>
+            <select id="cot-origen" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:13px;background:var(--surface);color:var(--text)">
+              <option value="">— Sin especificar —</option>
+              <option value="celular-cutting">📱 Celular Cutting</option>
+              <option value="celular-montajes">📞 Celular Fischer Montajes</option>
+              <option value="facebook">📘 Facebook</option>
+              <option value="instagram">📸 Instagram</option>
+              <option value="web">🌐 Página web</option>
+            </select>
           </div></div>
         </div>
         <!-- 2 MATERIAL -->
@@ -2747,6 +2757,7 @@ function cotSnapshot(){
   return {
     id:Math.max(Date.now(),cotizaciones.reduce((m,c)=>Math.max(m,typeof c.id==='number'?c.id:0),0)+1), ts:Date.now(), num:cotNextNum,
     job:document.getElementById("cot-job").value||"Sin nombre",
+    origen:document.getElementById("cot-origen").value||"",
     cant:r.cant, dolar:r.dolar, mat:r.mat, esp:document.getElementById("cot-esp-sel").value||document.getElementById("cot-esp").value,
     precio:document.getElementById("cot-precio").value,
     areaMode:cotAreaMode, ancho:document.getElementById("cot-ancho").value, largo:document.getElementById("cot-largo").value, area:document.getElementById("cot-area").value, medidaCliente:document.getElementById("cot-medida-cliente").value.trim(),
@@ -3152,10 +3163,12 @@ function renderCotHist(){
     const dias=Math.floor((Date.now()-c.ts)/86400000);
     const recordatorio=estado==="pendiente"&&dias>=DIAS_ALERTA
       ?` <span style="font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px;background:${dias>=DIAS_CRITICO?"var(--red-bg)":"var(--amber-bg)"};color:${dias>=DIAS_CRITICO?"var(--red-text)":"var(--amber-text)"}">⏰ ${dias}d</span>`:"";
+    const origenMap={"celular-cutting":"📱 Cutting","celular-montajes":"📞 Montajes","facebook":"📘 Facebook","instagram":"📸 Instagram","web":"🌐 Web"};
+    const origenTag=c.origen&&origenMap[c.origen]?` <span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:20px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8">${origenMap[c.origen]}</span>`:"";
     return `<div style="border-bottom:1px solid var(--border)">
       <div class="cot-hist-row" style="grid-template-columns:1fr auto auto auto auto ${conPagos?"auto auto auto":""};gap:6px;align-items:center;padding:10px 0;border:none">
         <div>
-          <div class="cot-hist-job">${c.job||"Sin nombre"}${recordatorio}</div>
+          <div class="cot-hist-job">${c.job||"Sin nombre"}${recordatorio}${origenTag}</div>
           <div class="cot-hist-sub">${f} · ${matInfo} · ${c.cant} u.${pagoSub}</div>
         </div>
         <div class="cot-hist-tot cot-mono">${cotFmt(totalReal)}${ajusteBadge}</div>
@@ -3456,6 +3469,7 @@ function cotReabrir(id){
   const c=cotizaciones.find(x=>x.id===id);if(!c)return;
   _cotizacionActivaId=id;
   document.getElementById("cot-job").value=c.job==="Sin nombre"?"":c.job;
+  document.getElementById("cot-origen").value=c.origen||"";
   document.getElementById("cot-cant").value=c.cant;
   document.getElementById("cot-dolar").value=c.dolar;
   document.getElementById("cot-mat").value=c.mat;
@@ -3933,6 +3947,7 @@ function cotReset(){
   cotCarrito=[];renderCotCarrito();
   _pedidoActivoId=null;_cotizacionActivaId=null;
   ["cot-job","cot-ancho","cot-largo","cot-area","cot-mm","cot-min","cot-golpes","cot-diseno","cot-ilum","cot-sold","cot-cil","cot-medida-cliente"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("cot-origen").value="";
   document.getElementById("cot-cant").value=1;
   ["cot-pintura","cot-oxid","cot-envio"].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById("cot-color-pintura").value="";
